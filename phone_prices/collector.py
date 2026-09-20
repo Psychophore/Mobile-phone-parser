@@ -48,18 +48,22 @@ def looks_like_ip_block(html: str) -> bool:
 class Collector:
     def __init__(self, *, headless: bool = True, min_pause: float = 3.0, max_pause: float = 7.0,
                  dump_dir: Path | None = None, chromium: str | None = None,
-                 profile_dir: Path | None = None, proxy: str | None = None):
+                 profile_dir: Path | None = None, proxy: str | None = None,
+                 no_browser: bool = False):
         self.headless = headless
         self.min_pause, self.max_pause = min_pause, max_pause
         self.dump_dir = dump_dir
         self.chromium = chromium or os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH")
         self.profile_dir = profile_dir
         self.proxy = proxy or os.environ.get("PARSER_PROXY")
+        self.no_browser = no_browser   # без Playwright: только JSON-источники через urllib (Termux, слабые машины)
         self._pw = self._browser = self._ctx = self._page = None
         self._warmed: set[str] = set()
 
     # -- жизненный цикл -----------------------------------------------------
     def __enter__(self):
+        if self.no_browser:
+            return self
         from playwright.sync_api import sync_playwright
         self._pw = sync_playwright().start()
         launch = dict(headless=self.headless, args=["--disable-blink-features=AutomationControlled"])
@@ -97,9 +101,21 @@ class Collector:
         p = self.dump_dir / name
         p.write_bytes(content if isinstance(content, bytes) else content.encode("utf-8"))
 
+    def _get_json(self, url: str) -> tuple[int, str]:
+        """JSON-запрос без браузера (режим --no-browser)."""
+        import urllib.error
+        import urllib.request
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json",
+                                                   "Accept-Language": "ru-RU,ru;q=0.9"})
+        try:
+            with urllib.request.urlopen(req, timeout=45) as r:
+                return r.status, r.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as e:
+            return e.code, e.read().decode("utf-8", errors="replace")
+
     def _warm(self, src: Source) -> None:
         """Зайти на главную магазина один раз, чтобы получить cookies."""
-        if src.key in self._warmed:
+        if src.key in self._warmed or self.no_browser:
             return
         self._warmed.add(src.key)
         try:
@@ -115,11 +131,17 @@ class Collector:
 
         Останавливается на капче. Страницы-заглушки магазина (is_error) и HTTP >= 400 пропускаются.
         """
+        if self.no_browser and src.kind != "json":
+            log(f"  [{src.key}] нужен браузер, в режиме --no-browser источник пропущен")
+            return
         self._warm(src)
         tag = f"{src.key}_{re.sub(r'[^a-z0-9]+', '-', model.name.lower())}"
         for n, url in enumerate(src.urls(model), 1):
             try:
-                if src.kind == "json":
+                if src.kind == "json" and self.no_browser:
+                    status, body = self._get_json(url)
+                    final_url = url
+                elif src.kind == "json":
                     resp = self._page.request.get(url, headers={"Accept": "application/json"}, timeout=45_000)
                     body = resp.text()
                     status, final_url = resp.status, url

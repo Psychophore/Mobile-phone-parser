@@ -34,6 +34,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--chromium", help="путь к бинарнику Chromium, если не тот, что ставит Playwright")
     ap.add_argument("--proxy", help="прокси для браузера, напр. socks5://user:pass@host:1080 "
                                     "(или переменная PARSER_PROXY); нужен российский адрес для Ozon и DNS")
+    ap.add_argument("--no-browser", action="store_true",
+                    help="без Playwright/Chromium: только JSON-источники (WB); работает в Termux на телефоне")
     ap.add_argument("--pause", nargs=2, type=float, default=(3.0, 7.0), metavar=("MIN", "MAX"))
     ap.add_argument("--keep-outliers", action="store_true", help="не отбрасывать цены выше 2×медианы")
     ap.add_argument("--from-html", type=Path, help="офлайн: разобрать сохранённую страницу вместо обхода")
@@ -64,7 +66,8 @@ def main(argv: list[str] | None = None) -> int:
         offers = []
         dump = a.dump if str(a.dump) else None
         with Collector(headless=not a.headed, min_pause=a.pause[0], max_pause=a.pause[1],
-                       dump_dir=dump, chromium=a.chromium, profile_dir=a.profile, proxy=a.proxy) as c:
+                       dump_dir=dump, chromium=a.chromium, profile_dir=a.profile, proxy=a.proxy,
+                       no_browser=a.no_browser) as c:
             for key in a.sources:
                 src = sources[key]
                 log(f"== {src.shop}")

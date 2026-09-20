@@ -36,6 +36,9 @@ python parse_prices.py
 # Показать окно браузера и сохранять cookies между запусками (помогает против капчи)
 python parse_prices.py --headed --profile .profile
 
+# Без браузера: только JSON-источники (сейчас это WB). Playwright не нужен, работает в Termux
+python parse_prices.py --no-browser --sources wb
+
 # Разобрать сохранённую страницу магазина (HTML для Маркета/Ozon/DNS, JSON для WB)
 python parse_prices.py --from-html dumps/yandex_poco-m7.html --source yandex --model "POCO M7"
 ```
@@ -184,6 +187,23 @@ git add dumps prices.csv   # dumps/ и prices.csv в .gitignore — добави
 После этого дампы можно разбирать и править селекторы в облачной сессии.
 Флаг `--proxy` (или `PARSER_PROXY`) — для запуска на своём компьютере через резидентный
 прокси, из облачной сессии он не поможет.
+
+## Запуск с телефона (Termux)
+
+Wildberries отдаёт JSON, ему браузер не нужен — режим `--no-browser` работает в Termux на Android:
+
+```bash
+pkg install python git
+git clone https://github.com/Psychophore/Mobile-phone-parser && cd Mobile-phone-parser
+python parse_prices.py --no-browser --sources wb
+```
+
+Маркет, Ozon и DNS требуют Chromium. В Termux он ставится только внутри proot-дистрибутива
+(`pkg install proot-distro && proot-distro install debian && proot-distro login debian`,
+затем `apt install chromium python3-pip`, `pip install playwright` и запуск с
+`--chromium /usr/bin/chromium`). Playwright не скачивает Chromium под ARM, поэтому нужен именно
+пакет из Debian. Работает медленно, на телефоне не проверялось; для Ozon и DNS при этом
+используется российский IP телефона, то есть блокировка по адресу снимается.
 
 ## Другие товары
 
