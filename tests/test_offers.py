@@ -211,6 +211,7 @@ def test_parse_config_space_separated():
     assert parse_config("Смартфон M7 8 ГБ+256 ГБ, синий") == "8/256"
     assert parse_config('6,72" Смартфон realme C67 черный') == "?"    # диагональ — не конфигурация
     assert parse_config("Смартфон 6.88 дюйма 128 Гц") == "?"
+    assert parse_config("TECNO Pova 6 Neo Global 16 1024Gb 8000mAh") == "16/1024"   # фейковые «1 ТБ» карточки
 
 
 def test_wb_title_composition():
