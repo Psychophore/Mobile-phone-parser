@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+"""Сбор актуальных цен на бюджетные смартфоны (market.yandex.ru, ozon.ru, wildberries.ru, dns-shop.ru).
+
+Примеры:
+  python parse_prices.py --models "POCO M7" --sources yandex     # проверка одной модели
+  python parse_prices.py                                          # все модели, все источники
+  python parse_prices.py --from-html page.html --source yandex --model "POCO M7"   # разбор сохранённой страницы
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+from phone_prices.collector import Collector, log
+from phone_prices.models import MODELS, find_models
+from phone_prices.offers import drop_outliers
+from phone_prices.report import summary, write_csv
+from phone_prices.sources import all_sources
+from phone_prices.sources.common import accept
+
+
+def main(argv: list[str] | None = None) -> int:
+    sources = all_sources()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--models", "-m", nargs="*", help="подстроки названий моделей; по умолчанию все")
+    ap.add_argument("--sources", "-s", nargs="*", default=list(sources), choices=list(sources),
+                    help="источники по приоритету (по умолчанию все)")
+    ap.add_argument("--out", "-o", type=Path, default=Path("prices.csv"))
+    ap.add_argument("--dump", type=Path, default=Path("dumps"),
+                    help="куда складывать сырые страницы и скриншоты капчи ('' — не сохранять)")
+    ap.add_argument("--headed", action="store_true", help="показывать окно браузера")
+    ap.add_argument("--profile", type=Path, help="каталог постоянного профиля Chromium (cookies переживают запуски)")
+    ap.add_argument("--chromium", help="путь к бинарнику Chromium, если не тот, что ставит Playwright")
+    ap.add_argument("--pause", nargs=2, type=float, default=(3.0, 7.0), metavar=("MIN", "MAX"))
+    ap.add_argument("--keep-outliers", action="store_true", help="не отбрасывать цены выше 2×медианы")
+    ap.add_argument("--from-html", type=Path, help="офлайн: разобрать сохранённую страницу вместо обхода")
+    ap.add_argument("--source", choices=list(sources), help="для --from-html: какой магазин")
+    ap.add_argument("--model", help="для --from-html: какая модель")
+    ap.add_argument("--list", action="store_true", help="показать список моделей и выйти")
+    a = ap.parse_args(argv)
+
+    if a.list:
+        for m in MODELS:
+            print(f"{m.name:<26} {m.config:<6} {m.note}")
+        return 0
+
+    models = find_models(a.models)
+
+    if a.from_html:
+        if not (a.source and a.model):
+            ap.error("--from-html требует --source и --model")
+        src, model = sources[a.source], find_models([a.model])[0]
+        raw = src.extract(a.from_html.read_text(encoding="utf-8", errors="replace"), model, src.home)
+        offers = [o for o in raw if accept(o, model)]
+        log(f"[{src.key}] {model.name}: карточек {len(raw)}, подходящих {len(offers)}")
+        for o in raw:
+            mark = "+" if o in offers else "-"
+            log(f"  {mark} {o.price_rub:>7} {o.config:<6} {o.version:<6} {o.title[:70]}")
+        models = [model]
+    else:
+        offers = []
+        dump = a.dump if str(a.dump) else None
+        with Collector(headless=not a.headed, min_pause=a.pause[0], max_pause=a.pause[1],
+                       dump_dir=dump, chromium=a.chromium, profile_dir=a.profile) as c:
+            for key in a.sources:
+                src = sources[key]
+                log(f"== {src.shop}")
+                for m in models:
+                    offers.extend(c.collect(src, m))
+
+    if not a.keep_outliers:
+        before = len(offers)
+        offers = drop_outliers(offers)
+        if before != len(offers):
+            log(f"отброшено выбросов: {before - len(offers)}")
+
+    write_csv(offers, a.out)
+    log(f"записано {len(offers)} строк в {a.out}")
+    print()
+    print(summary(offers, models))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
