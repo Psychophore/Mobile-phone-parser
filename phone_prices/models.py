@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 
@@ -25,17 +26,29 @@ class Model:
         return f"{self.ram}/{self.rom}"
 
     def matches_title(self, title: str) -> bool:
-        """Название карточки относится к этой модели (без учёта регистра и лишних слов)."""
-        t = _norm(title)
+        """Название карточки относится к этой модели.
+
+        Слова названия должны идти в карточке подряд (Redmi 15C и Redmi Note 15 — не Redmi 15,
+        realme C75 — не C67), а слово сразу после них не должно быть суффиксом другой
+        модификации (M7 Pro, Spark 40 Pro Plus).
+        """
+        words = _norm(title).split()
         for cand in (self.name, *self.aliases):
             tokens = _norm(cand).split()
-            if all(tok in t for tok in tokens):
-                return True
+            n = len(tokens)
+            for i in range(len(words) - n + 1):
+                if words[i:i + n] == tokens and (i + n >= len(words) or words[i + n] not in _VARIANT_SUFFIXES):
+                    return True
         return False
+
+
+# Слова, которые сразу после названия означают другую модель (POCO M7 Pro, Tecno Spark 40 Pro Plus)
+_VARIANT_SUFFIXES = frozenset({"pro", "plus", "max", "ultra", "lite", "neo", "mini", "prime", "power", "play"})
 
 
 def _norm(s: str) -> str:
     s = s.lower().replace("ё", "е")
+    s = re.sub(r"(?<=[a-zа-я])\+", " plus", s)   # «Pro+» → «pro plus»; «8+256» не трогаем
     for ch in "()[],.;:+«»\"'":
         s = s.replace(ch, " ")
     return " ".join(s.split())

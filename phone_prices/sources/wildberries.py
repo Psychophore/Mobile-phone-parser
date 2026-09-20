@@ -1,7 +1,13 @@
-"""Wildberries: JSON-поиск, который использует сам сайт. Запрашивается из контекста браузера."""
+"""Wildberries: JSON-поиск, который использует сам сайт. Запрашивается из контекста браузера.
+
+Особенности выдачи WB (сентябрь 2026): бренд лежит в отдельном поле `brand`, а `name` часто начинается
+с категории и без бренда («Смартфон M7 8GB+256GB Blue» при brand=POCO), у части продавцов бренд пуст,
+а конфигурация пишется через пробел («6 128ГБ», «6 128»). Цена — sizes[].price.product в копейках.
+"""
 from __future__ import annotations
 
 import json
+import re
 from urllib.parse import quote_plus
 
 from ..models import Model
@@ -10,6 +16,10 @@ from . import Source
 from .common import make_offer
 
 SHOP = "wildberries.ru"
+
+# категория в начале названия WB: «Смартфон …», «Мобильный телефон …», «Телефон …»
+_NO_BRAND = {"нет бренда", "без бренда", "no brand", "-"}
+_RE_CATEGORY_PREFIX = re.compile(r"^\s*(?:мобильный\s+)?(?:смартфон|телефон)\s*[,:-]?\s*", re.I)
 
 
 def urls(model: Model) -> list[str]:
@@ -35,6 +45,20 @@ def _price(p: dict) -> int | None:
     return None
 
 
+def compose_title(brand: str, name: str) -> str:
+    """«POCO» + «Смартфон M7 8GB+256GB Blue» -> «POCO M7 8GB+256GB Blue».
+
+    Категорию в начале названия убираем, бренд подставляем перед моделью, если его в названии нет.
+    """
+    brand, name = (brand or "").strip(), (name or "").strip()
+    if brand.lower() in _NO_BRAND:
+        brand = ""
+    core = _RE_CATEGORY_PREFIX.sub("", name)
+    if brand and brand.lower() not in core.lower():
+        core = f"{brand} {core}"
+    return " ".join(core.split())
+
+
 def extract(text: str, model: Model, page_url: str) -> list[Offer]:
     try:
         data = json.loads(text)
@@ -44,7 +68,7 @@ def extract(text: str, model: Model, page_url: str) -> list[Offer]:
     out: list[Offer] = []
     for p in products:
         price = _price(p)
-        name = " ".join(x for x in (p.get("brand"), p.get("name")) if x)
+        name = compose_title(p.get("brand", ""), p.get("name", ""))
         if not price or not name:
             continue
         out.append(make_offer(model, SHOP, name, price, p.get("supplier", ""),

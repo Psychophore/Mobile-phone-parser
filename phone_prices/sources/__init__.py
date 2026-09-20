@@ -19,6 +19,7 @@ class Source:
     urls: Callable[[Model], list[str]]  # адреса, которые надо открыть для модели (по приоритету)
     extract: Extractor
     kind: str = "html"                # "html" — страница в браузере, "json" — запрос через fetch
+    is_error: Callable[[str], bool] | None = None  # страница-заглушка магазина («ничего не найдено», 500)
 
 
 def all_sources() -> dict[str, Source]:

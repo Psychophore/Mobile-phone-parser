@@ -18,6 +18,8 @@ USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 
 _RE_CAPTCHA = re.compile(r"captcha|smartcaptcha|Подтвердите, что вы не робот|Доступ ограничен|"
                          r"Access Denied|antibot|Вы не робот", re.I)
+# Заглушки блокировки по IP: Ozon («Похоже, нет соединения… Выключите VPN»), DNS (qrator, «Доступ к сайту … запрещен»)
+_RE_IP_BLOCK = re.compile(r"Похоже, нет соединения|Выключите VPN|Доступ к сайту [\w.\-]+ запрещен|__qrator", re.I)
 
 
 def log(msg: str) -> None:
@@ -26,6 +28,11 @@ def log(msg: str) -> None:
 
 def looks_like_captcha(html: str, url: str) -> bool:
     return "showcaptcha" in url or bool(_RE_CAPTCHA.search(html[:20000]))
+
+
+def looks_like_ip_block(html: str) -> bool:
+    """Магазин отказал по адресу клиента (дата-центр / зарубежный IP); другие адреса пробовать бесполезно."""
+    return bool(_RE_IP_BLOCK.search(html[:20000]))
 
 
 class Collector:
@@ -90,11 +97,14 @@ class Collector:
         self._pause()
 
     # -- основная работа ----------------------------------------------------
-    def fetch(self, src: Source, model: Model) -> tuple[str, str] | None:
-        """Открыть страницы модели по приоритету; вернуть (содержимое, url) первой удачной."""
+    def pages(self, src: Source, model: Model):
+        """Открывать адреса модели по приоритету; отдавать (содержимое, url) каждой удачной страницы.
+
+        Останавливается на капче. Страницы-заглушки магазина (is_error) и HTTP >= 400 пропускаются.
+        """
         self._warm(src)
-        for url in src.urls(model):
-            tag = f"{src.key}_{re.sub(r'[^a-z0-9]+', '-', model.name.lower())}"
+        tag = f"{src.key}_{re.sub(r'[^a-z0-9]+', '-', model.name.lower())}"
+        for n, url in enumerate(src.urls(model), 1):
             try:
                 if src.kind == "json":
                     resp = self._page.request.get(url, headers={"Accept": "application/json"}, timeout=45_000)
@@ -109,27 +119,40 @@ class Collector:
                 log(f"  [{src.key}] {url} -> ошибка {e.__class__.__name__}: {str(e)[:120]}")
                 self._pause()
                 continue
-            self._dump(f"{tag}.{'json' if src.kind == 'json' else 'html'}", body)
+            suffix = "" if n == 1 else f"_{n}"
+            self._dump(f"{tag}{suffix}.{'json' if src.kind == 'json' else 'html'}", body)
+            if src.kind != "json" and looks_like_ip_block(body):
+                log(f"  [{src.key}] HTTP {status} на {final_url}: магазин блокирует этот IP, источник пропущен для модели")
+                self._pause()
+                return
             if status >= 400:
                 log(f"  [{src.key}] {url} -> HTTP {status}, пропускаю")
                 self._pause()
                 continue
             if src.kind != "json" and looks_like_captcha(body, final_url):
                 if self.dump_dir:
-                    self._dump(f"{tag}_captcha.png", self._page.screenshot(full_page=False))
+                    self._dump(f"{tag}{suffix}_captcha.png", self._page.screenshot(full_page=False))
                 log(f"  [{src.key}] капча на {final_url}, источник пропущен для модели")
                 self._pause()
-                return None
+                return
+            if src.is_error and src.is_error(body):
+                log(f"  [{src.key}] {url} -> страница с ошибкой магазина, пробую следующий адрес")
+                self._pause()
+                continue
             self._pause()
-            return body, final_url
-        return None
+            yield body, final_url
+
+    def fetch(self, src: Source, model: Model) -> tuple[str, str] | None:
+        """Первая удачная страница модели (для совместимости)."""
+        return next(self.pages(src, model), None)
 
     def collect(self, src: Source, model: Model) -> list[Offer]:
-        got = self.fetch(src, model)
-        if not got:
-            return []
-        body, url = got
-        raw = src.extract(body, model, url)
+        raw: list[Offer] = []
+        for body, url in self.pages(src, model):
+            raw = src.extract(body, model, url)
+            if raw:
+                break
+            log(f"  [{src.key}] {url} -> карточек нет, пробую следующий адрес")
         kept = [o for o in raw if accept(o, model)]
         log(f"  [{src.key}] {model.name}: карточек {len(raw)}, подходящих {len(kept)}")
         return kept
