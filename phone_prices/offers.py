@@ -9,8 +9,9 @@ from datetime import datetime, timezone
 CSV_FIELDS = ["model", "config", "shop", "price_rub", "version", "seller", "rating", "reviews", "seller_rating",
               "cross_border", "trusted", "title", "url", "fetched_at"]
 
-MIN_REVIEWS = 3      # меньше оценок — карточка считается непроверенной
-MIN_RATING = 4.3
+MIN_REVIEWS = 3               # меньше оценок — карточка считается непроверенной
+MIN_RATING = 4.3              # обычный продавец
+MIN_RATING_CROSS_BORDER = 4.8 # трансграничные продавцы и перекупы
 
 
 @dataclass
@@ -36,14 +37,14 @@ class Offer:
 
     @property
     def trusted(self) -> bool:
-        """Проверенное предложение: не трансграничное, и либо официальный магазин бренда, либо
-        у карточки не меньше MIN_REVIEWS оценок с рейтингом не ниже MIN_RATING.
+        """Проверенное предложение: официальный магазин бренда, либо у карточки не меньше
+        MIN_REVIEWS оценок с рейтингом не ниже MIN_RATING (для трансграничных продавцов
+        и перекупов — не ниже MIN_RATING_CROSS_BORDER).
         Рейтинг магазина сам по себе не учитывается: у перекупов он тоже 4.9."""
-        if self.cross_border:
-            return False
         if self.official:
             return True
-        return self.reviews >= MIN_REVIEWS and self.rating is not None and self.rating >= MIN_RATING
+        need = MIN_RATING_CROSS_BORDER if self.cross_border else MIN_RATING
+        return self.reviews >= MIN_REVIEWS and self.rating is not None and self.rating >= need
 
     def as_row(self) -> dict:
         d = asdict(self)

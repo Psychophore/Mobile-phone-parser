@@ -271,7 +271,10 @@ def test_trusted_rules():
     assert not mk(rating=5.0, reviews=1).trusted                 # одна оценка — не показатель
     assert not mk(seller_rating=4.9).trusted                     # рейтинг магазина без оценок товара не спасает
     assert not mk().trusted                                      # ничего не известно
-    assert not mk(official=True, cross_border=True).trusted      # из-за рубежа — всегда нет
+    assert mk(cross_border=True, rating=4.8, reviews=3).trusted  # перекуп: от 4.8 и от 3 оценок
+    assert not mk(cross_border=True, rating=4.7, reviews=50).trusted
+    assert not mk(cross_border=True, rating=5.0, reviews=2).trusted
+    assert mk(cross_border=True, rating=4.5, reviews=10, official=True).trusted
 
 
 def test_seller_classification():
@@ -292,7 +295,7 @@ def test_yandex_rating_and_abroad():
                         '<span class="ds-visuallyHidden">Оценок: (2.8K) · 10K купили</span>'
                         '<div data-auto="delivery-wrapper">6 – 8 окт, почта Из-за рубежа</div>')
     o = src.extract(f"<html>{card}</html>", m, "https://market.yandex.ru/x")[0]
-    assert o.rating == 4.9 and o.reviews == 2800 and o.cross_border and not o.trusted
+    assert o.rating == 4.9 and o.reviews == 2800 and o.cross_border and o.trusted
 
 
 def test_wb_rating_fields():
@@ -306,4 +309,4 @@ def test_wb_rating_fields():
     ]})
     a, b = src.extract(body, m, "")
     assert a.trusted and a.official and a.rating == 4.9 and a.reviews == 161 and a.seller_rating == 4.9
-    assert not b.trusted and b.cross_border
+    assert not b.trusted and b.cross_border      # 2 оценки — мало
