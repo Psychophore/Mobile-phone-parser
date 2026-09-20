@@ -71,7 +71,8 @@ def extract_jsonld(html: str, model: Model, page_url: str, shop: str) -> list[Of
 
 
 def make_offer(model: Model, shop: str, title: str, price: int, seller: str, url: str,
-               extra_text: str = "") -> Offer:
+               extra_text: str = "", **extra) -> Offer:
+    """extra: rating, reviews, seller_rating, cross_border, official (см. Offer)."""
     return Offer(
         model=model.name,
         config=parse_config(title),
@@ -81,6 +82,7 @@ def make_offer(model: Model, shop: str, title: str, price: int, seller: str, url
         seller=seller,
         title=title,
         url=url,
+        **extra,
     )
 
 

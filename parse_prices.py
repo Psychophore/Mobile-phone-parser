@@ -38,6 +38,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="без Playwright/Chromium: только JSON-источники (WB); работает в Termux на телефоне")
     ap.add_argument("--pause", nargs=2, type=float, default=(3.0, 7.0), metavar=("MIN", "MAX"))
     ap.add_argument("--keep-outliers", action="store_true", help="не отбрасывать цены выше 2×медианы")
+    ap.add_argument("--all-sellers", action="store_true",
+                    help="не отсеивать трансграничных и непроверенных продавцов (по умолчанию только проверенные)")
     ap.add_argument("--from-html", type=Path, help="офлайн: разобрать сохранённую страницу вместо обхода")
     ap.add_argument("--source", choices=list(sources), help="для --from-html: какой магазин")
     ap.add_argument("--model", help="для --from-html: какая модель")
@@ -60,7 +62,9 @@ def main(argv: list[str] | None = None) -> int:
         log(f"[{src.key}] {model.name}: карточек {len(raw)}, подходящих {len(offers)}")
         for o in raw:
             mark = "+" if o in offers else "-"
-            log(f"  {mark} {o.price_rub:>7} {o.config:<6} {o.version:<6} {o.title[:70]}")
+            trust = "✓" if o.trusted else ("×" if o.cross_border else "?")
+            rating = f"{o.rating:.1f}({o.reviews})" if o.rating else f"—({o.reviews})"
+            log(f"  {mark}{trust} {o.price_rub:>7} {o.config:<6} {o.version:<6} {rating:>10} {o.seller[:18]:<18} {o.title[:60]}")
         models = [model]
     else:
         offers = []
@@ -73,6 +77,12 @@ def main(argv: list[str] | None = None) -> int:
                 log(f"== {src.shop}")
                 for m in models:
                     offers.extend(c.collect(src, m))
+
+    if not a.all_sellers:
+        before = len(offers)
+        offers = [o for o in offers if o.trusted]
+        if before != len(offers):
+            log(f"отброшено непроверенных продавцов: {before - len(offers)} (--all-sellers оставит их)")
 
     if not a.keep_outliers:
         before = len(offers)

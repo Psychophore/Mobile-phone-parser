@@ -107,8 +107,13 @@ def test_cli_from_html(tmp_path):
     page = tmp_path / "p.html"
     page.write_text('<a href="/product--poco-m7/1">POCO M7 6/128</a> 11 990 ₽', encoding="utf-8")
     out = tmp_path / "prices.csv"
-    r = subprocess.run([sys.executable, "parse_prices.py", "--from-html", str(page), "--source", "yandex",
-                        "--model", "POCO M7", "--out", str(out)], capture_output=True, text=True,
+    args = [sys.executable, "parse_prices.py", "--from-html", str(page), "--source", "yandex",
+            "--model", "POCO M7", "--out", str(out)]
+    r = subprocess.run(args, capture_output=True, text=True, cwd=Path(__file__).resolve().parents[1])
+    assert r.returncode == 0, r.stderr
+    assert "нет данных" in r.stdout          # карточка без оценок и продавца — непроверенная
+    assert "непроверенных продавцов: 1" in r.stderr
+    r = subprocess.run(args + ["--all-sellers"], capture_output=True, text=True,
                        cwd=Path(__file__).resolve().parents[1])
     assert r.returncode == 0, r.stderr
     assert "до 15 тыс." in r.stdout
@@ -256,3 +261,49 @@ def test_proxy_opts():
     from phone_prices.collector import _proxy_opts
     assert _proxy_opts("socks5://u:p@1.2.3.4:1080") == {"server": "socks5://1.2.3.4:1080", "username": "u", "password": "p"}
     assert _proxy_opts("http://proxy.local:3128") == {"server": "http://proxy.local:3128"}
+
+
+def test_trusted_rules():
+    mk = lambda **kw: Offer("POCO M7", "6/128", "x", 14000, "?", "", "POCO M7 6/128", "u", **kw)
+    assert mk(official=True).trusted
+    assert mk(rating=4.9, reviews=161).trusted
+    assert not mk(rating=3.7, reviews=3).trusted                 # низкий рейтинг товара
+    assert not mk(rating=5.0, reviews=1).trusted                 # одна оценка — не показатель
+    assert not mk(seller_rating=4.9).trusted                     # рейтинг магазина без оценок товара не спасает
+    assert not mk().trusted                                      # ничего не известно
+    assert not mk(official=True, cross_border=True).trusted      # из-за рубежа — всегда нет
+
+
+def test_seller_classification():
+    from phone_prices.offers import parse_count, seller_is_cross_border, seller_is_official
+    assert seller_is_cross_border("Находки из Китая") and seller_is_cross_border("AE Dubai Freezone Official")
+    assert seller_is_cross_border("ОАЭшка") and not seller_is_cross_border("Xiaomi Официальный Магазин")
+    assert seller_is_official("Xiaomi Официальный Магазин") and seller_is_official("Xiaomi Россия Магазин")
+    assert not seller_is_official("AE Dubai Freezone Official")
+    assert parse_count("2.8K") == 2800 and parse_count("161") == 161 and parse_count("") == 0
+
+
+def test_yandex_rating_and_abroad():
+    src = all_sources()["yandex"]
+    m = find_models(["POCO M7"])[0]
+    card = _YM_SNIPPET.format(href="/card/poco-m7/1", title="Смартфон Poco M7, 6/128ГБ, global", price="14 503")
+    card = card.replace('<div data-auto="delivery-wrapper">завтра</div>',
+                        '<span class="ds-visuallyHidden">Рейтинг товара: 4.9 из 5</span>'
+                        '<span class="ds-visuallyHidden">Оценок: (2.8K) · 10K купили</span>'
+                        '<div data-auto="delivery-wrapper">6 – 8 окт, почта Из-за рубежа</div>')
+    o = src.extract(f"<html>{card}</html>", m, "https://market.yandex.ru/x")[0]
+    assert o.rating == 4.9 and o.reviews == 2800 and o.cross_border and not o.trusted
+
+
+def test_wb_rating_fields():
+    src = all_sources()["wb"]
+    m = find_models(["POCO M7"])[0]
+    body = json.dumps({"products": [
+        {"id": 1, "brand": "POCO", "name": "Смартфон M7 6GB+128GB Black", "supplier": "Xiaomi Официальный Магазин",
+         "reviewRating": 4.9, "feedbacks": 161, "supplierRating": 4.9, "sizes": [{"price": {"product": 1376600}}]},
+        {"id": 2, "brand": "POCO", "name": "Смартфон M7, 6 128ГБ, global", "supplier": "Находки из Китая",
+         "reviewRating": 5, "feedbacks": 2, "supplierRating": 5, "sizes": [{"price": {"product": 1057200}}]},
+    ]})
+    a, b = src.extract(body, m, "")
+    assert a.trusted and a.official and a.rating == 4.9 and a.reviews == 161 and a.seller_rating == 4.9
+    assert not b.trusted and b.cross_border

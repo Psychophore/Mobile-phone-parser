@@ -26,7 +26,8 @@ def _from_cards(html: str, model: Model, page_url: str) -> list[Offer]:
         pm = re.search(r"product-buy__price[^>]*>(.*?)</", card, re.S)
         price = parse_price(strip_tags(pm.group(1)) + " ₽") if pm else None
         if title and price:
-            out.append(make_offer(model, SHOP, title, price, "DNS", "https://www.dns-shop.ru" + m.group(1)))
+            out.append(make_offer(model, SHOP, title, price, "DNS", "https://www.dns-shop.ru" + m.group(1),
+                                  official=True))
     return out
 
 

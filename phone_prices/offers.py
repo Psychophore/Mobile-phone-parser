@@ -6,7 +6,11 @@ import statistics
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 
-CSV_FIELDS = ["model", "config", "shop", "price_rub", "version", "seller", "title", "url", "fetched_at"]
+CSV_FIELDS = ["model", "config", "shop", "price_rub", "version", "seller", "rating", "reviews", "seller_rating",
+              "cross_border", "trusted", "title", "url", "fetched_at"]
+
+MIN_REVIEWS = 3      # меньше оценок — карточка считается непроверенной
+MIN_RATING = 4.3
 
 
 @dataclass
@@ -20,13 +24,33 @@ class Offer:
     title: str
     url: str
     fetched_at: str = ""
+    rating: float | None = None      # рейтинг товара/карточки, 0–5
+    reviews: int = 0                 # число оценок карточки
+    seller_rating: float | None = None
+    cross_border: bool = False       # доставка из-за рубежа / трансграничный продавец
+    official: bool = False           # официальный магазин бренда
 
     def __post_init__(self) -> None:
         if not self.fetched_at:
             self.fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    @property
+    def trusted(self) -> bool:
+        """Проверенное предложение: не трансграничное, и либо официальный магазин бренда, либо
+        у карточки не меньше MIN_REVIEWS оценок с рейтингом не ниже MIN_RATING.
+        Рейтинг магазина сам по себе не учитывается: у перекупов он тоже 4.9."""
+        if self.cross_border:
+            return False
+        if self.official:
+            return True
+        return self.reviews >= MIN_REVIEWS and self.rating is not None and self.rating >= MIN_RATING
+
     def as_row(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        d["trusted"] = int(self.trusted)
+        d["cross_border"] = int(self.cross_border)
+        d.pop("official")
+        return {k: d[k] for k in CSV_FIELDS}
 
 
 # "6/128", "6 / 128 ГБ", "6GB/128GB", "8+256", "6 128ГБ", "6 128" (WB пишет через пробел)
@@ -54,6 +78,33 @@ def parse_version(text: str) -> str:
     if _RE_GLOBAL.search(text):
         return "Global"
     return "?"
+
+
+# «Оценок: (2.8K)» / «(161)» / «2,8 тыс.»
+_RE_COUNT = re.compile(r"(\d+(?:[.,]\d+)?)\s*(k|к|тыс\.?)?", re.I)
+
+
+def parse_count(text: str) -> int:
+    """'2.8K' -> 2800, '161' -> 161, '' -> 0."""
+    m = _RE_COUNT.search(text or "")
+    if not m:
+        return 0
+    n = float(m.group(1).replace(",", "."))
+    return int(n * 1000) if m.group(2) else int(n)
+
+
+# Признаки трансграничного продавца по названию (WB): «Находки из Китая», «ОАЭшка», «AE Dubai Freezone»
+_RE_CROSS_BORDER_SELLER = re.compile(r"кита[йя]|china|дуба[йя]|dubai|оаэ|uae|freezone|hong ?kong|гонконг|"
+                                     r"из-за рубежа|зарубеж", re.I)
+_RE_OFFICIAL_SELLER = re.compile(r"официальн|official|россия магазин", re.I)
+
+
+def seller_is_cross_border(name: str) -> bool:
+    return bool(_RE_CROSS_BORDER_SELLER.search(name or ""))
+
+
+def seller_is_official(name: str) -> bool:
+    return bool(_RE_OFFICIAL_SELLER.search(name or "")) and not seller_is_cross_border(name)
 
 
 def parse_price(text: str) -> int | None:

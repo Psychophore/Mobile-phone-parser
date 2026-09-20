@@ -2,7 +2,9 @@
 
 Разметка выдачи (сентябрь 2026): карточка — <div data-auto="searchOrganic">, внутри
   <span data-auto="snippet-title" title="…">, ссылка <a href="/card/…/<id>?…"> и
-  <span data-auto="snippet-price-current"><span>14 503</span><span> ₽</span></span>.
+  <span data-auto="snippet-price-current"><span>14 503</span><span> ₽</span></span>;
+  рейтинг — скрытый текст «Рейтинг товара: 4.9 из 5», «Оценок: (2.8K) · 10K купили»;
+  у трансграничных продавцов в блоке доставки текст «Из-за рубежа».
 Рекламные врезки (data-auto="searchIncut", iPhone и т.п.) отсеиваются по названию модели.
 Прямые адреса категорий вида /category/smartfony-<slug> отдают страницу «Что-то пошло не так».
 """
@@ -13,7 +15,7 @@ from html import unescape
 from urllib.parse import quote_plus, urljoin
 
 from ..models import Model
-from ..offers import Offer, parse_price
+from ..offers import Offer, parse_count, parse_price
 from . import Source
 from .common import extract_generic, extract_jsonld, make_offer, strip_tags
 
@@ -27,6 +29,9 @@ _RE_FAILURE = re.compile(r'data-auto="failure"')
 _RE_TITLE = re.compile(r'<[^>]+data-auto="snippet-title"[^>]*\btitle="([^"]*)"', re.I)
 _RE_CARD_HREF = re.compile(r'href="(/card/[^"]+|/product--[^"]+)"', re.I)
 _RE_PRICE = re.compile(r'data-auto="snippet-price-current"[^>]*>(.*?)</span>\s*</span>', re.S | re.I)
+_RE_RATING = re.compile(r"Рейтинг товара:\s*([\d.,]+)\s*из\s*5", re.I)
+_RE_REVIEWS = re.compile(r"Оценок:\s*\(([^)]*)\)", re.I)
+_RE_ABROAD = re.compile(r"Из-за рубежа", re.I)
 
 
 def urls(model: Model) -> list[str]:
@@ -56,7 +61,12 @@ def _from_snippets(html: str, model: Model, page_url: str) -> list[Offer]:
             continue
         hm = _RE_CARD_HREF.search(block)
         href = unescape(hm.group(1)).split("?", 1)[0] if hm else ""
-        out.append(make_offer(model, SHOP, title, price, "", urljoin(page_url, href) if href else page_url))
+        rm, cm = _RE_RATING.search(block), _RE_REVIEWS.search(block)
+        rating = float(rm.group(1).replace(",", ".")) if rm else None
+        text = strip_tags(block[:6000])
+        out.append(make_offer(model, SHOP, title, price, "", urljoin(page_url, href) if href else page_url,
+                              rating=rating, reviews=parse_count(cm.group(1)) if cm else 0,
+                              cross_border=bool(_RE_ABROAD.search(text))))
     return out
 
 
