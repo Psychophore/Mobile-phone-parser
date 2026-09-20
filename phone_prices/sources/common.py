@@ -1,9 +1,11 @@
 """Общие приёмы извлечения карточек из HTML: JSON-LD и текстовый фолбэк."""
 from __future__ import annotations
 
+import email
 import json
 import re
 from html import unescape
+from pathlib import Path
 from urllib.parse import urljoin
 
 from ..models import Model
@@ -116,3 +118,17 @@ def extract_generic(html: str, model: Model, page_url: str, shop: str,
         seen.add(href)
         out.append(make_offer(model, shop, inner, price, "", urljoin(page_url, unescape(href)), chunk[:300]))
     return out
+
+
+def read_page(path: Path) -> str:
+    """Прочитать сохранённую страницу: обычный HTML/JSON или .mhtml (так сохраняет Chrome на Android:
+    меню → «Скачать»; внутри multipart с quoted-printable, берём часть text/html)."""
+    data = path.read_bytes()
+    head = data[:4096].lower()
+    if path.suffix.lower() in (".mhtml", ".mht") or (b"mime-version:" in head and b"multipart/related" in head):
+        msg = email.message_from_bytes(data)
+        for part in msg.walk():
+            if part.get_content_type() == "text/html":
+                payload = part.get_payload(decode=True)
+                return payload.decode(part.get_content_charset() or "utf-8", errors="replace")
+    return data.decode("utf-8", errors="replace")

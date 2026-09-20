@@ -235,3 +235,24 @@ def test_ip_block_detection():
     assert looks_like_ip_block("<div class=\"descr\"><p>Доступ к сайту www.dns-shop.ru запрещен.</p>")
     assert looks_like_ip_block('<script src="/__qrator/qauth_utm_v2d_v9118.js"></script>')
     assert not looks_like_ip_block('<div data-auto="searchOrganic">POCO M7 14 503 ₽</div>')
+
+
+def test_read_page_mhtml(tmp_path):
+    from phone_prices.sources.common import read_page
+    html = '<a href="/card/poco-m7/1">POCO M7 6/128 ГБ</a> 12 990 ₽'
+    import quopri
+    body = quopri.encodestring(html.encode("utf-8")).decode("ascii")
+    mhtml = ("From: <Saved by Blink>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/related; "
+             "boundary=\"----=_B\"\r\n\r\n------=_B\r\nContent-Type: text/html\r\nContent-Transfer-Encoding: "
+             f"quoted-printable\r\nContent-Location: https://market.yandex.ru/x\r\n\r\n{body}\r\n------=_B--\r\n")
+    p = tmp_path / "page.mhtml"
+    p.write_text(mhtml, encoding="utf-8")
+    assert read_page(p) == html
+    p2 = tmp_path / "page.html"; p2.write_text(html, encoding="utf-8")
+    assert read_page(p2) == html
+
+
+def test_proxy_opts():
+    from phone_prices.collector import _proxy_opts
+    assert _proxy_opts("socks5://u:p@1.2.3.4:1080") == {"server": "socks5://1.2.3.4:1080", "username": "u", "password": "p"}
+    assert _proxy_opts("http://proxy.local:3128") == {"server": "http://proxy.local:3128"}

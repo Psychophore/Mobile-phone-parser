@@ -151,6 +151,39 @@ Infinix Hot 50i            4/128        —       —          —      0  не�
 Pova 6 Neo — в 8/128 и 8/256, Infinix Hot 50i — в 4/256 и 6/128 (на WB — одни чехлы).
 Redmi Note 14 на WB представлен только 5G-версией.
 
+## Ozon и DNS с телефона
+
+Блокировка у обоих по IP, поэтому из облака нужен либо российский адрес, либо страницы, сохранённые
+с российского устройства.
+
+**Прислать страницы (чинит селекторы, не живой прогон).** В Chrome на Android открыть
+поиск магазина, в меню включить «Версия для ПК», дождаться загрузки карточек и нажать
+«Скачать» — Chrome сохранит `.mhtml` в Downloads. Файл положить в `dumps/` (или прислать
+в чат) и прогнать:
+
+```bash
+python parse_prices.py --from-html dumps/ozon_poco-m7.mhtml --source ozon --model "POCO M7"
+```
+
+`.mhtml` читается напрямую. Адреса для сохранения: Ozon —
+`https://www.ozon.ru/search/?text=POCO+M7+6/128&category=15502`, DNS —
+`https://www.dns-shop.ru/search/?q=POCO+M7+6/128&category=17a8a01d16404e77`.
+
+**Телефон как прокси (живой прогон).** В Termux поднять SOCKS-прокси и вывести его наружу
+туннелем, затем запускать парсер с `--proxy`:
+
+```bash
+# на телефоне, Termux
+pkg install microsocks openssh
+microsocks -p 1080 -u user -P pass &
+# наружу: ssh -R 1080:localhost:1080 <свой VPS>, ngrok tcp 1080 или Tailscale
+# в облаке
+python parse_prices.py --sources ozon dns --proxy socks5://user:pass@<host>:<port>
+```
+
+Адрес мобильного оператора — резидентный, Ozon и DNS его не режут (в отличие от дата-центров).
+Вместо флага можно задать переменную `PARSER_PROXY`.
+
 ## Другие товары
 
 Репозиторий будет использоваться для сверки цен и по другим категориям. Что для этого менять:

@@ -26,6 +26,16 @@ def log(msg: str) -> None:
     print(msg, file=sys.stderr, flush=True)
 
 
+def _proxy_opts(url: str) -> dict:
+    """'socks5://user:pass@host:1080' -> параметры proxy для Playwright."""
+    from urllib.parse import urlsplit
+    u = urlsplit(url if "://" in url else "http://" + url)
+    opts = {"server": f"{u.scheme}://{u.hostname}:{u.port}" if u.port else f"{u.scheme}://{u.hostname}"}
+    if u.username:
+        opts["username"], opts["password"] = u.username, u.password or ""
+    return opts
+
+
 def looks_like_captcha(html: str, url: str) -> bool:
     return "showcaptcha" in url or bool(_RE_CAPTCHA.search(html[:20000]))
 
@@ -38,12 +48,13 @@ def looks_like_ip_block(html: str) -> bool:
 class Collector:
     def __init__(self, *, headless: bool = True, min_pause: float = 3.0, max_pause: float = 7.0,
                  dump_dir: Path | None = None, chromium: str | None = None,
-                 profile_dir: Path | None = None):
+                 profile_dir: Path | None = None, proxy: str | None = None):
         self.headless = headless
         self.min_pause, self.max_pause = min_pause, max_pause
         self.dump_dir = dump_dir
         self.chromium = chromium or os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH")
         self.profile_dir = profile_dir
+        self.proxy = proxy or os.environ.get("PARSER_PROXY")
         self._pw = self._browser = self._ctx = self._page = None
         self._warmed: set[str] = set()
 
@@ -54,6 +65,8 @@ class Collector:
         launch = dict(headless=self.headless, args=["--disable-blink-features=AutomationControlled"])
         if self.chromium:
             launch["executable_path"] = self.chromium
+        if self.proxy:
+            launch["proxy"] = _proxy_opts(self.proxy)
         ctx_opts = dict(user_agent=USER_AGENT, locale="ru-RU", timezone_id="Europe/Moscow",
                         viewport={"width": 1366, "height": 800})
         if self.profile_dir:

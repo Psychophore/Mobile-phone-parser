@@ -17,7 +17,7 @@ from phone_prices.models import MODELS, find_models
 from phone_prices.offers import drop_outliers
 from phone_prices.report import summary, write_csv
 from phone_prices.sources import all_sources
-from phone_prices.sources.common import accept
+from phone_prices.sources.common import accept, read_page
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -32,6 +32,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--headed", action="store_true", help="показывать окно браузера")
     ap.add_argument("--profile", type=Path, help="каталог постоянного профиля Chromium (cookies переживают запуски)")
     ap.add_argument("--chromium", help="путь к бинарнику Chromium, если не тот, что ставит Playwright")
+    ap.add_argument("--proxy", help="прокси для браузера, напр. socks5://user:pass@host:1080 "
+                                    "(или переменная PARSER_PROXY); нужен российский адрес для Ozon и DNS")
     ap.add_argument("--pause", nargs=2, type=float, default=(3.0, 7.0), metavar=("MIN", "MAX"))
     ap.add_argument("--keep-outliers", action="store_true", help="не отбрасывать цены выше 2×медианы")
     ap.add_argument("--from-html", type=Path, help="офлайн: разобрать сохранённую страницу вместо обхода")
@@ -51,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
         if not (a.source and a.model):
             ap.error("--from-html требует --source и --model")
         src, model = sources[a.source], find_models([a.model])[0]
-        raw = src.extract(a.from_html.read_text(encoding="utf-8", errors="replace"), model, src.home)
+        raw = src.extract(read_page(a.from_html), model, src.home)
         offers = [o for o in raw if accept(o, model)]
         log(f"[{src.key}] {model.name}: карточек {len(raw)}, подходящих {len(offers)}")
         for o in raw:
@@ -62,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
         offers = []
         dump = a.dump if str(a.dump) else None
         with Collector(headless=not a.headed, min_pause=a.pause[0], max_pause=a.pause[1],
-                       dump_dir=dump, chromium=a.chromium, profile_dir=a.profile) as c:
+                       dump_dir=dump, chromium=a.chromium, profile_dir=a.profile, proxy=a.proxy) as c:
             for key in a.sources:
                 src = sources[key]
                 log(f"== {src.shop}")
