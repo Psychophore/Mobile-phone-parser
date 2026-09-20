@@ -11,6 +11,9 @@ pip install -r requirements.txt
 playwright install chromium
 ```
 
+В облачной сессии Claude Code Chromium уже стоит: добавляйте `--chromium /opt/pw-browsers/chromium`
+или задайте `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`.
+
 ## Запуск
 
 ```bash
