@@ -425,3 +425,6 @@ def test_dns_cards_real_markup():
     assert (o.price_rub, o.config, o.version, o.rating, o.reviews, o.seller) == (15999, "6/128", "EAC", 4.66, 521, "DNS")
     assert o.trusted and accept(o, m)
     assert o.url == "https://www.dns-shop.ru/product/6a0b48154b24d0a4/69-smartfon-poco-m7-128-gb-cernyj/"
+    analog = html.replace('href="/product/6a0b48154b24d0a4/69-smartfon-poco-m7-128-gb-cernyj/"',
+                          'href="https://www.dns-shop.ru/product/analog/6a0b48154b24d0a4/69-smartfon-poco-m7-128-gb-cernyj/"')
+    assert src.extract(analog, m, "") == []          # нет в наличии — ссылка на аналоги
