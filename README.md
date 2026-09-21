@@ -36,6 +36,10 @@ python parse_prices.py
 # Показать окно браузера и сохранять cookies между запусками (помогает против капчи)
 python parse_prices.py --headed --profile .profile
 
+# Настоящий Chrome/Edge вместо Chromium Playwright: JS-проверка Ozon («Antibot Challenge»)
+# в Chromium Playwright заканчивается страницей «Похоже, нет соединения» (инцидент fab_chlg_…)
+python parse_prices.py --sources ozon dns --headed --profile .profile --channel chrome
+
 # Без браузера: только JSON-источники (сейчас это WB). Playwright не нужен, работает в Termux
 python parse_prices.py --no-browser --sources wb
 

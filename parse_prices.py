@@ -32,6 +32,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--headed", action="store_true", help="показывать окно браузера")
     ap.add_argument("--profile", type=Path, help="каталог постоянного профиля Chromium (cookies переживают запуски)")
     ap.add_argument("--chromium", help="путь к бинарнику Chromium, если не тот, что ставит Playwright")
+    ap.add_argument("--channel", choices=["chrome", "msedge", "chrome-beta", "msedge-beta"],
+                    help="использовать установленный в системе Chrome/Edge вместо Chromium Playwright "
+                         "(антибот Ozon хуже распознаёт настоящий браузер)")
     ap.add_argument("--proxy", help="прокси для браузера, напр. socks5://user:pass@host:1080 "
                                     "(или переменная PARSER_PROXY); нужен российский адрес для Ozon и DNS")
     ap.add_argument("--no-browser", action="store_true",
@@ -71,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
         dump = a.dump if str(a.dump) else None
         with Collector(headless=not a.headed, min_pause=a.pause[0], max_pause=a.pause[1],
                        dump_dir=dump, chromium=a.chromium, profile_dir=a.profile, proxy=a.proxy,
-                       no_browser=a.no_browser) as c:
+                       no_browser=a.no_browser, channel=a.channel) as c:
             for key in a.sources:
                 src = sources[key]
                 log(f"== {src.shop}")

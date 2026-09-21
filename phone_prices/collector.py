@@ -58,7 +58,7 @@ class Collector:
     def __init__(self, *, headless: bool = True, min_pause: float = 3.0, max_pause: float = 7.0,
                  dump_dir: Path | None = None, chromium: str | None = None,
                  profile_dir: Path | None = None, proxy: str | None = None,
-                 no_browser: bool = False):
+                 no_browser: bool = False, channel: str | None = None):
         self.headless = headless
         self.min_pause, self.max_pause = min_pause, max_pause
         self.dump_dir = dump_dir
@@ -66,6 +66,7 @@ class Collector:
         self.profile_dir = profile_dir
         self.proxy = proxy or os.environ.get("PARSER_PROXY")
         self.no_browser = no_browser   # без Playwright: только JSON-источники через urllib (Termux, слабые машины)
+        self.channel = channel         # "chrome" / "msedge": установленный в системе браузер вместо Chromium Playwright
         self._pw = self._browser = self._ctx = self._page = None
         self._warmed: set[str] = set()
 
@@ -78,6 +79,8 @@ class Collector:
         launch = dict(headless=self.headless, args=["--disable-blink-features=AutomationControlled"])
         if self.chromium:
             launch["executable_path"] = self.chromium
+        elif self.channel:
+            launch["channel"] = self.channel
         if self.proxy:
             launch["proxy"] = _proxy_opts(self.proxy)
         ctx_opts = dict(user_agent=USER_AGENT, locale="ru-RU", timezone_id="Europe/Moscow",
