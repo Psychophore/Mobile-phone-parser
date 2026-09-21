@@ -108,7 +108,10 @@ class Collector:
             try:
                 from patchright.sync_api import sync_playwright
             except ImportError:
-                raise SystemExit("--stealth требует patchright: pip install patchright")
+                log("  patchright не установлен (pip install patchright), иду обычным playwright: "
+                    "Ozon такой браузер распознаёт")
+                self.stealth = False
+                from playwright.sync_api import sync_playwright
         else:
             from playwright.sync_api import sync_playwright
         self._pw = sync_playwright().start()
@@ -125,12 +128,26 @@ class Collector:
             launch["channel"] = self.channel
         if self.proxy:
             launch["proxy"] = _proxy_opts(self.proxy)
+        try:
+            self._open(launch)
+        except Exception as e:
+            if not self.channel:
+                raise
+            # Chrome/Edge в системе нет или он не запустился — не ронять обход, взять Chromium Playwright.
+            log(f"  {self.channel} не запустился ({e.__class__.__name__}: {str(e)[:100]}), "
+                f"беру Chromium Playwright: Ozon и DNS его не пускают")
+            self.channel = None
+            launch.pop("channel", None)
+            self._open(launch)
+        return self
+
+    def _open(self, launch: dict) -> None:
+        """Открыть контекст и вкладку. Настоящему Chrome (--channel) ничего не подменяем: UA должен
+        совпадать с Client Hints самого браузера, а внедрённые скрипты антибот видит. Chromium
+        Playwright без подмены выглядит как headless-сборка, ему подменяем."""
         real_browser = bool(self.channel)
         ctx_opts = dict(locale="ru-RU", timezone_id="Europe/Moscow")
         if not real_browser:
-            # Chromium Playwright без подмены выглядит как headless-сборка; настоящему Chrome ничего
-            # подменять нельзя: UA должен совпадать с Client Hints самого браузера, а внедрённые
-            # скрипты антибот видит.
             ctx_opts.update(user_agent=USER_AGENT, viewport={"width": 1366, "height": 800})
         else:
             ctx_opts["no_viewport"] = True
@@ -143,7 +160,6 @@ class Collector:
             self._ctx.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         self._page = self._ctx.new_page()  # одна вкладка на весь обход
         self._page.on("response", self._on_response)
-        return self
 
     def _on_response(self, resp) -> None:
         """Сохранить тело XHR-ответа, если источник просил его перехватить (Ozon: composer-api JSON)."""
@@ -188,6 +204,17 @@ class Collector:
         except urllib.error.HTTPError as e:
             return e.code, e.read().decode("utf-8", errors="replace")
 
+    def _json_request(self, src: Source, url: str) -> tuple[int, str]:
+        """JSON-запрос из браузера с заголовками сайта: cookies вкладки плюс Referer и Origin
+        магазина — без них WB отвечает 403 «Angie». Fetch изнутри страницы не годится:
+        WB не пускает кросс-доменный запрос со своей же вкладки (TypeError: Failed to fetch)."""
+        home = src.home.rstrip("/")
+        resp = self._page.request.get(url, timeout=45_000, headers={
+            "Accept": "application/json", "Accept-Language": "ru-RU,ru;q=0.9",
+            "Referer": home + "/", "Origin": home,
+        })
+        return resp.status, resp.text()
+
     def _warm(self, src: Source) -> None:
         """Зайти на главную магазина один раз, чтобы получить cookies."""
         if src.key in self._warmed or self.no_browser:
@@ -201,12 +228,19 @@ class Collector:
         self._pause()
 
     # -- основная работа ----------------------------------------------------
+    @staticmethod
+    def _is_api(src: Source, url: str) -> bool:
+        """Этот адрес — JSON-ручка магазина, а не страница. У WB часть адресов — сама выдача сайта."""
+        if src.kind != "json":
+            return False
+        return not src.api_urls or bool(re.search(src.api_urls, url))
+
     def pages(self, src: Source, model: Model):
         """Открывать адреса модели по приоритету; отдавать (содержимое, url) каждой удачной страницы.
 
         Останавливается на капче. Страницы-заглушки магазина (is_error) и HTTP >= 400 пропускаются.
         """
-        if self.no_browser and src.kind != "json":
+        if self.no_browser and (src.kind != "json" or not src.api_urls):
             log(f"  [{src.key}] нужен браузер, в режиме --no-browser источник пропущен")
             return
         self._capture_re = re.compile(src.capture) if src.capture else None
@@ -215,16 +249,17 @@ class Collector:
         for n, url in enumerate(src.urls(model), 1):
             self._captured = []
             try:
-                if src.kind == "json" and self.no_browser:
+                if self._is_api(src, url) and self.no_browser:
                     status, body = self._get_json(url)
                     final_url = url
-                elif src.kind == "json":
-                    resp = self._page.request.get(url, headers={"Accept": "application/json"}, timeout=45_000)
-                    body = resp.text()
-                    status, final_url = resp.status, url
+                elif self._is_api(src, url):
+                    status, body = self._json_request(src, url)
+                    final_url = url
                 else:
                     resp = self._page.goto(url, wait_until="domcontentloaded", timeout=60_000)
                     self._page.wait_for_timeout(3000)
+                    if src.capture and not self._captured:   # выдача приходит XHR и ещё не пришла
+                        self._page.wait_for_timeout(5000)
                     body, final_url = self._page.content(), self._page.url
                     status = resp.status if resp else 0
                     if looks_like_challenge(body):

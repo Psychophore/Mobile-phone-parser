@@ -86,12 +86,13 @@
 
   <details>
     <summary>Ещё настройки: браузер, прокси, разбор сохранённой страницы</summary>
-    <div class="sub" style="margin:8px 0 0">Ozon и DNS пускают только настоящий Chrome с patchright:
-      выберите «системный Chrome» и поставьте галочку patchright. Если магазин отвечает 403
-      или «Похоже, нет соединения» — запрос ушёл через VPN, проверьте галочку «напрямую».</div>
+    <div class="sub" style="margin:8px 0 0">По умолчанию стоит рабочая связка для Ozon и DNS: системный
+      Chrome с patchright, окном браузера и профилем <code>.profile</code> (cookies переживают запуски).
+      Если Chrome или patchright не установлены, парсер откатится на Chromium Playwright и напишет об этом
+      в логе — Ozon и DNS тогда ответят заглушкой, Маркет и WB работают и так.</div>
     <div class="checks">
-      <label><input type="checkbox" id="headed"> показывать окно браузера</label>
-      <label><input type="checkbox" id="stealth"> patchright (--stealth)</label>
+      <label><input type="checkbox" id="headed" checked> показывать окно браузера</label>
+      <label><input type="checkbox" id="stealth" checked> patchright (--stealth)</label>
       <label><input type="checkbox" id="nobrowser"> без браузера (только WB)</label>
       <label><input type="checkbox" id="dumps" checked> сохранять страницы в dumps/</label>
     </div>
@@ -99,12 +100,12 @@
       <div class="w120">
         <label for="channel">Браузер</label>
         <select id="channel">
+          <option value="chrome" selected>системный Chrome</option>
           <option value="">Chromium Playwright</option>
-          <option value="chrome">системный Chrome</option>
           <option value="msedge">системный Edge</option>
         </select>
       </div>
-      <div class="w120"><label for="profile">Профиль</label><input id="profile" type="text" placeholder=".profile"></div>
+      <div class="w120"><label for="profile">Профиль</label><input id="profile" type="text" value=".profile"></div>
       <div class="grow"><label for="proxy">Прокси</label><input id="proxy" type="text" placeholder="socks5://host:1080"></div>
       <div class="w90"><label for="pause1">Пауза от, с</label><input id="pause1" type="number" min="0" value="3"></div>
       <div class="w90"><label for="pause2">до, с</label><input id="pause2" type="number" min="0" value="7"></div>

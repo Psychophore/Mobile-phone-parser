@@ -553,3 +553,14 @@ def test_direct_disables_browser_proxy():
     c = Collector(direct=True)
     assert c.direct
     assert Collector(direct=True, proxy="socks5://host:1080").direct is False   # явный прокси главнее
+
+
+def test_wb_keeps_api_urls_and_adds_site_fallback():
+    """У WB два адреса-ручки и запасной — страница выдачи сайта, её открывает браузер."""
+    from phone_prices.collector import Collector
+    src = all_sources()["wb"]
+    us = src.urls(find_models(["POCO M7"])[0])
+    assert [Collector._is_api(src, u) for u in us] == [True, True, False]
+    assert "wildberries.ru/catalog/0/search.aspx" in us[-1]
+    import re
+    assert src.capture and re.search(src.capture, us[0])   # перехватываем именно XHR выдачи

@@ -23,6 +23,9 @@ _NO_BRAND = {"нет бренда", "без бренда", "no brand", "-"}
 _RE_CATEGORY_PREFIX = re.compile(r"^\s*(?:мобильный\s+)?(?:смартфон|телефон)\s*[,:-]?\s*", re.I)
 
 
+API_URLS = r"^https://search\.wb\.ru/"
+
+
 def urls(model: Model) -> list[str]:
     q = quote_plus(model.search_text)
     return [
@@ -30,6 +33,9 @@ def urls(model: Model) -> list[str]:
         f"&query={q}&resultset=catalog&sort=priceup&spp=30&suppressSpellcheck=false",
         "https://search.wb.ru/exactmatch/ru/common/v5/search?appType=1&curr=rub&dest=-1257786"
         f"&query={q}&resultset=catalog&sort=priceup&spp=30",
+        # Запасной путь, когда ручка отвечает 403 «Angie»: открыть выдачу сайта и перехватить
+        # её собственный XHR к search.wb.ru — тот же JSON, но запрос делает сама страница.
+        f"https://www.wildberries.ru/catalog/0/search.aspx?search={q}",
     ]
 
 
@@ -82,4 +88,5 @@ def extract(text: str, model: Model, page_url: str) -> list[Offer]:
     return out
 
 
-SOURCE = Source(key="wb", shop=SHOP, home="https://www.wildberries.ru/", urls=urls, extract=extract, kind="json")
+SOURCE = Source(key="wb", shop=SHOP, home="https://www.wildberries.ru/", urls=urls, extract=extract,
+                kind="json", api_urls=API_URLS, capture=r"search\.wb\.ru/.*search")
