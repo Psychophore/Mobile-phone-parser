@@ -27,6 +27,7 @@ class Model:
     skip_accessories: bool = True   # отсеивать чехлы, стёкла, зарядки
     skip_5g: bool = True            # отсеивать 5G-версии
     min_price: int = 3000           # дешевле — точно не тот товар
+    in_category: bool = True        # искать в категории смартфонов магазина (у свободного запроса — нет)
 
     @property
     def search_query(self) -> str:
@@ -78,7 +79,21 @@ class Model:
 _VARIANT_SUFFIXES = frozenset({"pro", "plus", "max", "ultra", "lite", "neo", "mini", "prime", "power", "play"})
 
 
+# Единицы, которые магазины пишут слитно с числом: «1.7л», «128гб», «2000вт»
+_RE_NUMBER = re.compile(r"^(\d+(?:\.\d+)?)(?:л|мл|гб|тб|gb|tb|мм|см|кг|г|вт|w|ah|мач)?$")
+
+
+def _number(word: str) -> float | None:
+    m = _RE_NUMBER.match(word)
+    return float(m.group(1)) if m else None
+
+
 def _word_hit(token: str, words: list[str]) -> bool:
+    """Слово запроса есть в названии. Числа сравниваются как числа («2.0» — это и «2 л», и «2.0 л»),
+    слова с цифрами и буквами — целиком (M7 — не M70), обычные слова — по началу (падежи)."""
+    num = _number(token)
+    if num is not None:
+        return any(_number(w) == num for w in words)
     if any(ch.isdigit() for ch in token):
         return token in words
     return any(w.startswith(token) for w in words)
@@ -87,7 +102,9 @@ def _word_hit(token: str, words: list[str]) -> bool:
 def _norm(s: str) -> str:
     s = s.lower().replace("ё", "е")
     s = re.sub(r"(?<=[a-zа-я])\+", " plus", s)   # «Pro+» → «pro plus»; «8+256» не трогаем
-    for ch in "()[],.;:+«»\"'":
+    s = re.sub(r"(?<=\d),(?=\d)", ".", s)        # «1,7 л» → «1.7 л»
+    s = re.sub(r"(?<!\d)[.,](?!\d)|(?<=\d)[.,](?!\d)", " ", s)   # точка-разделитель, но не в «1.7»
+    for ch in "()[];:+«»\"'":
         s = s.replace(ch, " ")
     return " ".join(s.split())
 

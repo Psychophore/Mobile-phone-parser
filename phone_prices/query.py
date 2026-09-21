@@ -15,12 +15,15 @@ MIN_PRICE = 500   # ниже — почти всегда не тот товар;
 
 
 def build_query(text: str, *, ram: int = 0, rom: int = 0, accessories: bool = False,
-                allow_5g: bool = True, drop_variants: bool = True, min_price: int = MIN_PRICE) -> Model:
+                allow_5g: bool = True, drop_variants: bool = True, min_price: int = MIN_PRICE,
+                in_category: bool = False) -> Model:
     """Собрать Model из ключевых слов.
 
     ram/rom — целевая конфигурация; если её не задали, берётся из самого запроса («POCO M7 6/128»).
     accessories — не отсеивать чехлы и стёкла, allow_5g — не отсеивать 5G,
-    drop_variants — отбрасывать модификации (Pro, Plus, Max), которых нет в запросе.
+    drop_variants — отбрасывать модификации (Pro, Plus, Max), которых нет в запросе,
+    in_category — искать только в категории смартфонов (иначе по всему магазину: «чайник»
+    в категории смартфонов выдаёт смартфоны).
     """
     text = " ".join((text or "").split())
     if not text:
@@ -39,4 +42,5 @@ def build_query(text: str, *, ram: int = 0, rom: int = 0, accessories: bool = Fa
         skip_accessories=not accessories,
         skip_5g=not allow_5g,
         min_price=max(0, int(min_price)),
+        in_category=in_category,
     )

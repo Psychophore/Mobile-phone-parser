@@ -78,12 +78,17 @@
     <label><input type="checkbox" id="variants" checked> без модификаций (Pro, Plus, Max)</label>
     <label><input type="checkbox" id="acc"> оставлять аксессуары</label>
     <label><input type="checkbox" id="g5"> оставлять 5G</label>
+    <label><input type="checkbox" id="incat"> только категория смартфонов</label>
+    <label><input type="checkbox" id="direct" checked> напрямую, мимо VPN и системного прокси</label>
   </div>
 
   <div class="chips" id="presets"></div>
 
   <details>
     <summary>Ещё настройки: браузер, прокси, разбор сохранённой страницы</summary>
+    <div class="sub" style="margin:8px 0 0">Ozon и DNS пускают только настоящий Chrome с patchright:
+      выберите «системный Chrome» и поставьте галочку patchright. Если магазин отвечает 403
+      или «Похоже, нет соединения» — запрос ушёл через VPN, проверьте галочку «напрямую».</div>
     <div class="checks">
       <label><input type="checkbox" id="headed"> показывать окно браузера</label>
       <label><input type="checkbox" id="stealth"> patchright (--stealth)</label>
@@ -159,6 +164,7 @@ function form(){
     price_min: $("pmin").value, price_max: $("pmax").value,
     trusted_only: $("trusted").checked, no_outliers: $("nooutliers").checked,
     drop_variants: $("variants").checked, accessories: $("acc").checked, allow_5g: $("g5").checked,
+    in_category: $("incat").checked, direct: $("direct").checked,
     headed: $("headed").checked, stealth: $("stealth").checked, no_browser: $("nobrowser").checked,
     dumps: $("dumps").checked, channel: $("channel").value, profile: $("profile").value,
     proxy: $("proxy").value, pause: [$("pause1").value || 0, $("pause2").value || 0],

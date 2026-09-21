@@ -26,9 +26,13 @@ from .common import extract_generic, extract_jsonld, make_offer, strip_tags
 SHOP = "ozon.ru"
 
 
+CATEGORY_SMARTPHONES = 15502
+
+
 def urls(model: Model) -> list[str]:
     q = quote_plus(model.search_text)
-    return [f"https://www.ozon.ru/search/?text={q}&from_global=true&category=15502"]
+    cat = f"&category={CATEGORY_SMARTPHONES}" if model.in_category else ""
+    return [f"https://www.ozon.ru/search/?text={q}&from_global=true{cat}"]
 
 
 _WIDGET_KEYS = ("searchResultsV2", "tileGridDesktop", "tileGrid", "skuGrid")

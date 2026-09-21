@@ -83,7 +83,8 @@ class Collector:
     def __init__(self, *, headless: bool = True, min_pause: float = 3.0, max_pause: float = 7.0,
                  dump_dir: Path | None = None, chromium: str | None = None,
                  profile_dir: Path | None = None, proxy: str | None = None,
-                 no_browser: bool = False, channel: str | None = None, stealth: bool = False):
+                 no_browser: bool = False, channel: str | None = None, stealth: bool = False,
+                 direct: bool = False):
         self.headless = headless
         self.min_pause, self.max_pause = min_pause, max_pause
         self.dump_dir = dump_dir
@@ -93,6 +94,7 @@ class Collector:
         self.no_browser = no_browser   # без Playwright: только JSON-источники через urllib (Termux, слабые машины)
         self.channel = channel         # "chrome" / "msedge": установленный в системе браузер вместо Chromium Playwright
         self.stealth = stealth         # patchright вместо playwright (закрывает утечку CDP, которую ловит антибот Ozon)
+        self.direct = direct and not self.proxy   # ходить напрямую, мимо системного прокси/VPN (FlClash и т.п.)
         self._pw = self._browser = self._ctx = self._page = None
         self._warmed: set[str] = set()
         self._captured: list[tuple[str, str]] = []   # (url, body) перехваченных XHR-ответов
@@ -110,7 +112,13 @@ class Collector:
         else:
             from playwright.sync_api import sync_playwright
         self._pw = sync_playwright().start()
-        launch = dict(headless=self.headless, args=["--disable-blink-features=AutomationControlled"])
+        args = ["--disable-blink-features=AutomationControlled"]
+        if self.direct:
+            # Магазины смотрят на адрес клиента: через туннель WB отвечает 403, Ozon и DNS — заглушкой.
+            # Эти ключи выключают системный прокси браузера; маршрутизацию уровня TUN они не отменяют.
+            args += ["--no-proxy-server", "--proxy-bypass-list=*"]
+            log("  соединение напрямую, мимо системного прокси")
+        launch = dict(headless=self.headless, args=args)
         if self.chromium:
             launch["executable_path"] = self.chromium
         elif self.channel:
@@ -171,8 +179,11 @@ class Collector:
         import urllib.request
         req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json",
                                                    "Accept-Language": "ru-RU,ru;q=0.9"})
+        # direct: opener без ProxyHandler из окружения (HTTP_PROXY/HTTPS_PROXY и настроек системы)
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({})) if self.direct \
+            else urllib.request.build_opener()
         try:
-            with urllib.request.urlopen(req, timeout=45) as r:
+            with opener.open(req, timeout=45) as r:
                 return r.status, r.read().decode("utf-8", errors="replace")
         except urllib.error.HTTPError as e:
             return e.code, e.read().decode("utf-8", errors="replace")
@@ -227,9 +238,15 @@ class Collector:
             suffix = "" if n == 1 else f"_{n}"
             self._dump(f"{tag}{suffix}.{'json' if src.kind == 'json' else 'html'}", body)
             if src.kind != "json" and looks_like_ip_block(body):
-                log(f"  [{src.key}] HTTP {status} на {final_url}: магазин блокирует этот IP, источник пропущен для модели")
+                log(f"  [{src.key}] HTTP {status} на {final_url}: магазин не принял этот адрес или браузер, "
+                    f"источник пропущен для модели{self._block_hint()}")
                 self._pause()
                 return
+            if status in (403, 429):
+                log(f"  [{src.key}] HTTP {status}: магазин не принял запрос с этого адреса — лимит частоты "
+                    f"или зарубежный выход{self._block_hint()}")
+                self._pause()
+                continue
             if status >= 400:
                 log(f"  [{src.key}] {url} -> HTTP {status}, пропускаю")
                 self._pause()
@@ -250,6 +267,15 @@ class Collector:
                 self._dump(f"{tag}{suffix}_api{i}.json", cap_body)
                 yield cap_body, cap_url
             yield body, final_url
+
+    def _block_hint(self) -> str:
+        """Подсказка к заглушке магазина: чаще всего дело не в самом адресе, а в том, чем и откуда ходим."""
+        bits = []
+        if not (self.channel and self.stealth):
+            bits.append("Ozon и DNS пускают только настоящий Chrome с patchright (--channel chrome --stealth)")
+        if not self.direct and not self.proxy:
+            bits.append("а запрос через VPN/туннель они видят как зарубежный (--direct ходит мимо системного прокси)")
+        return (" — " + ", ".join(bits)) if bits else ""
 
     def _wait_content(self, src: Source, body: str, timeout_ms: int = 12_000) -> str:
         """Дождаться элементов выдачи (DNS подгружает цены отдельным запросом уже после загрузки страницы)."""

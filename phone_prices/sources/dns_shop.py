@@ -20,8 +20,12 @@ from .common import extract_generic, extract_jsonld, make_offer, strip_tags
 SHOP = "dns-shop.ru"
 
 
+CATEGORY_SMARTPHONES = "17a8a01d16404e77"
+
+
 def urls(model: Model) -> list[str]:
-    return [f"https://www.dns-shop.ru/search/?q={quote_plus(model.search_text)}&category=17a8a01d16404e77"]
+    cat = f"&category={CATEGORY_SMARTPHONES}" if model.in_category else ""
+    return [f"https://www.dns-shop.ru/search/?q={quote_plus(model.search_text)}{cat}"]
 
 
 _RE_NAME = re.compile(r'<a[^>]+class="catalog-product__name[^"]*"[^>]+href="([^"]+)"([^>]*)>(.*?)</a>', re.S)

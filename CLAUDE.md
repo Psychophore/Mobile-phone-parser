@@ -19,7 +19,7 @@
 ## Как работать
 
 ```bash
-python -m pytest -q tests                       # 35 тестов, фрагменты реальных дампов
+python -m pytest -q tests                       # 38 тестов, фрагменты реальных дампов
 python parse_prices.py --ui                     # веб-интерфейс владельца: ключевые слова в браузере
 python parse_prices.py -q "POCO M7 6/128" -s wb # свободный поиск из консоли
 python parse_prices.py --models "POCO M7" --sources yandex     # одна модель, один источник
@@ -33,14 +33,16 @@ python parse_prices.py --from-html dumps/ozon_poco-m7.html --source ozon --model
 ## Что где
 
 - `parse_prices.py` — CLI. `phone_prices/collector.py` — обход через Playwright (капча, JS-проверки,
-  блокировки по IP, перехват XHR, ожидание селекторов, `--no-browser`, `--channel`, `--stealth`, `--proxy`).
+  блокировки по IP, перехват XHR, ожидание селекторов, `--no-browser`, `--channel`, `--stealth`, `--proxy`,
+  `--direct` — мимо системного прокси/VPN, чтобы магазины видели домашний адрес, а не выход туннеля).
 - `phone_prices/sources/<shop>.py` — адреса, экстрактор и особенности магазина, в докстринге — разметка.
 - `phone_prices/models.py` — список моделей и целевых конфигураций (из handoff-документа
   «подбор смартфона до 15 тыс.»), сопоставление названий: `match="phrase"` — слова подряд (модели
   из списка), `match="words"` — все слова в любом порядке (свободный запрос). Там же поля правил
   отбора (`skip_accessories`, `skip_5g`, `min_price`), которые читает `sources/common.py::accept`.
 - `phone_prices/query.py` — `build_query`: Model из строки с ключевыми словами (конфигурация «6/128»
-  отделяется от слов запроса).
+  отделяется от слов запроса; `in_category=False` — искать по всему магазину, а не в категории смартфонов:
+  «чайник» в `hid=91491` выдаёт смартфоны).
 - `phone_prices/webui.py` + `phone_prices/ui.html` — локальный веб-интерфейс (`--ui`): владелец сам
   вбивает ключевые слова, не тратя сессию. Только `127.0.0.1`, зависимостей сверх стандартной
   библиотеки нет, поиск в отдельном потоке, лог через `collector.set_log_sink`.
@@ -61,6 +63,9 @@ python parse_prices.py --from-html dumps/ozon_poco-m7.html --source ozon --model
   для Chromium и задаёт `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`.
 
 ## Незакрытое
+
+- WB отвечает 403 или 200 с пустой выдачей на серию запросов с одного адреса (21.09: из облака сперва
+  100 карточек, после десятка проб — пусто). Дело в адресе и частоте, не в разметке.
 
 - Живой прогон Ozon и DNS с новым кодом (перехват XHR, ожидание цен) владелец ещё не делал:
   экстракторы проверены только на дампах от 21.09.2026.

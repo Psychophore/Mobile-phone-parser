@@ -97,6 +97,8 @@ def params_from(raw: dict) -> dict:
         "accessories": bool(raw.get("accessories", False)),
         "allow_5g": bool(raw.get("allow_5g", False)),
         "drop_variants": bool(raw.get("drop_variants", True)),
+        "in_category": bool(raw.get("in_category", False)),
+        "direct": bool(raw.get("direct", False)),
         "headed": bool(raw.get("headed", False)),
         "channel": (raw.get("channel") or None) if raw.get("channel") in ("chrome", "msedge") else None,
         "stealth": bool(raw.get("stealth", False)),
@@ -117,7 +119,7 @@ def _crawl(job: Job, model) -> list[Offer]:
                    dump_dir=Path("dumps") if p["dumps"] else None,
                    profile_dir=Path(p["profile"]) if p["profile"] else None,
                    proxy=p["proxy"] or None, no_browser=p["no_browser"],
-                   channel=p["channel"], stealth=p["stealth"]) as c:
+                   channel=p["channel"], stealth=p["stealth"], direct=p["direct"]) as c:
         for key in p["sources"]:
             if job.stop:
                 log("остановлено владельцем")
@@ -146,7 +148,8 @@ def run_job(job: Job) -> None:
     p = job.params
     try:
         model = build_query(p["query"], ram=p["ram"], rom=p["rom"], accessories=p["accessories"],
-                            allow_5g=p["allow_5g"], drop_variants=p["drop_variants"])
+                            allow_5g=p["allow_5g"], drop_variants=p["drop_variants"],
+                            in_category=p["in_category"])
         log(f"запрос: «{model.search_text}»" + (f", конфигурация {model.config}" if model.config else ""))
         offers = _from_dump(job, model) if p["from_html"] else _crawl(job, model)
 

@@ -35,12 +35,13 @@ _RE_ABROAD = re.compile(r"Из-за рубежа", re.I)
 
 
 def urls(model: Model) -> list[str]:
+    """Поиск по всему магазину; для моделей из списка — сперва в категории «Смартфоны» (hid)."""
     q = quote_plus(model.search_query)
     qc = quote_plus(model.search_text)
-    return [
-        f"https://market.yandex.ru/search?text={q}&hid={HID_SMARTPHONES}&how=aprice&lr={LR_MOSCOW}",
-        f"https://market.yandex.ru/search?text={qc}&how=aprice&lr={LR_MOSCOW}",
-    ]
+    out = [f"https://market.yandex.ru/search?text={qc}&how=aprice&lr={LR_MOSCOW}"]
+    if model.in_category:
+        out.insert(0, f"https://market.yandex.ru/search?text={q}&hid={HID_SMARTPHONES}&how=aprice&lr={LR_MOSCOW}")
+    return out
 
 
 def is_error_page(html: str) -> bool:

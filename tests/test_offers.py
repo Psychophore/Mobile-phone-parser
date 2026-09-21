@@ -525,3 +525,31 @@ def test_webui_rejects_empty_query():
     from phone_prices import webui
     body, code = webui.start_job({"query": "  "})
     assert code == 400 and "запрос" in body["error"]
+
+
+def test_free_query_searches_whole_shop_but_models_keep_category():
+    """Свободный запрос ищет по всему магазину: «чайник» в категории смартфонов выдаёт смартфоны."""
+    srcs = all_sources()
+    free, listed = build_query("чайник 2.0"), find_models(["POCO M7"])[0]
+    assert "hid=" not in srcs["yandex"].urls(free)[0]
+    assert "category=" not in srcs["ozon"].urls(free)[0]
+    assert "category=" not in srcs["dns"].urls(free)[0]
+    assert "hid=91491" in srcs["yandex"].urls(listed)[0]
+    assert "category=15502" in srcs["ozon"].urls(listed)[0]
+    assert "hid=" not in build_query("POCO M7", in_category=False).search_text  # запрос сам по себе не меняется
+    assert "hid=91491" in srcs["yandex"].urls(build_query("POCO M7", in_category=True))[0]
+
+
+def test_numbers_in_query_compare_as_numbers():
+    q = build_query("чайник 2.0", accessories=True, min_price=0)
+    assert q.matches_title("Чайник заварочный 2 л стеклянный")      # «2» — это и есть 2.0
+    assert q.matches_title("Чайник электрический Bosch 2.0л")
+    assert not q.matches_title("Чайник Tefal 1,7 л")
+    assert not build_query("POCO M7").matches_title("POCO M70 6/128")  # буква с цифрой — целиком
+
+
+def test_direct_disables_browser_proxy():
+    from phone_prices.collector import Collector
+    c = Collector(direct=True)
+    assert c.direct
+    assert Collector(direct=True, proxy="socks5://host:1080").direct is False   # явный прокси главнее

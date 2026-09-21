@@ -31,6 +31,8 @@ def main(argv: list[str] | None = None) -> int:
                                           "напр. -q \"POCO M7 6/128\" или -q \"чайник электрический\"")
     ap.add_argument("--ram", type=int, default=0, help="для --query: целевая ОЗУ, ГБ")
     ap.add_argument("--rom", type=int, default=0, help="для --query: целевой накопитель, ГБ")
+    ap.add_argument("--in-category", action="store_true",
+                    help="для --query: искать только в категории смартфонов (по умолчанию — по всему магазину)")
     ap.add_argument("--sources", "-s", nargs="*", default=list(sources), choices=list(sources),
                     help="источники по приоритету (по умолчанию все)")
     ap.add_argument("--out", "-o", type=Path, default=Path("prices.csv"))
@@ -47,6 +49,9 @@ def main(argv: list[str] | None = None) -> int:
                          "протокола отладки, по которой антибот Ozon распознаёт управляемый браузер")
     ap.add_argument("--proxy", help="прокси для браузера, напр. socks5://user:pass@host:1080 "
                                     "(или переменная PARSER_PROXY); нужен российский адрес для Ozon и DNS")
+    ap.add_argument("--direct", action="store_true",
+                    help="ходить напрямую, мимо системного прокси и VPN (FlClashX и т.п.): магазины видят "
+                         "домашний адрес, а не зарубежный выход туннеля")
     ap.add_argument("--no-browser", action="store_true",
                     help="без Playwright/Chromium: только JSON-источники (WB); работает в Termux на телефоне")
     ap.add_argument("--pause", nargs=2, type=float, default=(3.0, 7.0), metavar=("MIN", "MAX"))
@@ -72,7 +77,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{m.name:<26} {m.config:<6} {m.note}")
         return 0
 
-    models = [build_query(a.query, ram=a.ram, rom=a.rom)] if a.query else find_models(a.models)
+    models = ([build_query(a.query, ram=a.ram, rom=a.rom, in_category=a.in_category)]
+              if a.query else find_models(a.models))
 
     if a.from_html:
         if not a.source or not (a.model or a.query):
@@ -90,11 +96,11 @@ def main(argv: list[str] | None = None) -> int:
         models = [model]
     else:
         offers = []
-        dump = a.dump if str(a.dump) else None
+        dump = a.dump if str(a.dump) not in ("", ".") else None   # --dump '' -> Path('.'), это «не сохранять»
         with Collector(headless=not a.headed, min_pause=a.pause[0], max_pause=a.pause[1],
                        dump_dir=dump, chromium=a.chromium, profile_dir=a.profile, proxy=a.proxy,
                        no_browser=a.no_browser, channel=a.channel,
-                       stealth=a.stealth) as c:
+                       stealth=a.stealth, direct=a.direct) as c:
             for key in a.sources:
                 src = sources[key]
                 log(f"== {src.shop}")
