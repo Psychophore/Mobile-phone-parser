@@ -45,8 +45,18 @@ def looks_like_challenge(html: str) -> bool:
     return bool(_RE_CHALLENGE.search(html[:20000]))
 
 
+_RE_SCRIPT = re.compile(r"<(script|style)[^>]*>.*?</\1>", re.S | re.I)
+
+
 def looks_like_captcha(html: str, url: str) -> bool:
-    return "showcaptcha" in url or bool(_RE_CAPTCHA.search(html[:20000]))
+    """Капча/блокировка по заголовку и видимому тексту. Скрипты выкидываем: у DNS в словаре формы
+    обратной связи лежит «Вы не робот», а в бандлах магазинов слово captcha встречается всегда."""
+    if "showcaptcha" in url:
+        return True
+    head = html[:60000]
+    if len(html) > 300_000:      # большая страница с контентом — не заглушка
+        return False
+    return bool(_RE_CAPTCHA.search(_RE_SCRIPT.sub(" ", head)))
 
 
 def looks_like_ip_block(html: str) -> bool:
@@ -193,6 +203,8 @@ class Collector:
                     status = resp.status if resp else 0
                     if looks_like_challenge(body):
                         body, final_url, status = self._pass_challenge(src, body, status)
+                    if src.wait_for and status < 400 and not looks_like_captcha(body, final_url):
+                        body = self._wait_content(src, body)
             except Exception as e:
                 log(f"  [{src.key}] {url} -> ошибка {e.__class__.__name__}: {str(e)[:120]}")
                 self._pause()
@@ -223,6 +235,16 @@ class Collector:
                 self._dump(f"{tag}{suffix}_api{i}.json", cap_body)
                 yield cap_body, cap_url
             yield body, final_url
+
+    def _wait_content(self, src: Source, body: str, timeout_ms: int = 12_000) -> str:
+        """Дождаться элементов выдачи (DNS подгружает цены отдельным запросом уже после загрузки страницы)."""
+        try:
+            self._page.wait_for_selector(src.wait_for, timeout=timeout_ms, state="attached")
+            self._page.wait_for_timeout(1000)
+            return self._page.content()
+        except Exception:
+            log(f"  [{src.key}] элементы выдачи ({src.wait_for}) не появились за {timeout_ms // 1000} с")
+            return body
 
     def _pass_challenge(self, src: Source, body: str, status: int) -> tuple[str, str, int]:
         """Дать странице JS-проверки (Ozon antibot, DNS Qrator) пройти и перезагрузиться самой."""

@@ -357,3 +357,71 @@ def test_ozon_composer_api_json():
     kept = [o for o in raw if accept(o, m)]
     assert len(kept) == 1
     assert src.capture and "entrypoint-api" in src.capture
+
+
+def test_captcha_ignores_script_dictionaries():
+    from phone_prices.collector import looks_like_captcha
+    dns = ('<html><head><script>var feedback = {"Вы_не_робот":"Вы не робот","Категория":"Категория"};'
+           'var x = "captcha";</script></head><body><div class="catalog-product">POCO M7</div></body></html>')
+    assert not looks_like_captcha(dns, "https://www.dns-shop.ru/search/?q=POCO")
+    assert looks_like_captcha("<html><body><h1>Подтвердите, что вы не робот</h1></body></html>", "https://x/")
+    assert looks_like_captcha("<html></html>", "https://market.yandex.ru/showcaptcha?x=1")
+
+
+# Сокращённая реальная плитка выдачи Ozon (сентябрь 2026)
+_OZON_TILE = (
+    '<div data-index="{i}" class="tile-root p5g_21 h3k_21"><a data-prerender="true" target="_blank" href="{href}?at=1kCm" '
+    'rel="noopener" class="q4b1_5_9-a tile-clickable-element"><div class="g2q_21"><img class="b95_4_3-a"></div></a> '
+    '<div class="g6p_21"><div class="q3g_21 c35_6_0-a"><div class="c35_6_0-a0">'
+    '<span class="c35_6_0-a1 tsHeadline500Medium c35_6_0-b2">{price} ₽</span>'
+    '<span class="c35_6_0-a1 tsBodyControl400Small c35_6_0-b">25 047 ₽</span>'
+    '<span class="tsBodyControl400Small c35_6_0-a6"><div class="c35_6_0-a9"></div>−34%</span></div></div>'
+    '<div class="q3g_21 c7w1_8_3-a"><svg/><span class="tsBodyControl400Small">Бренд проверен</span></div>'
+    '<div class="ea5_7_7-a"><a target="_blank" href="{href}?at=1kCm" class="q4b1_5_9-a tile-clickable-element gq5_21">'
+    '<div class="bq03_9_2-a q3g_21"><span class="tsBody500Medium">{title}</span></div></a> </div>'
+    '<div class="q3g_21 c7w1_8_3-a"><svg/><span class="tsBodyControl300XSmall" style="padding-left:2px;color:var(--textSecondary);">{rating}</span>'
+    '<svg/><span class="tsBodyControl300XSmall" style="padding-left:2px;color:var(--textSecondary);">{reviews}&nbsp;отзыва</span></div></div></div>'
+)
+
+
+def test_ozon_tiles():
+    src = all_sources()["ozon"]
+    m = find_models(["POCO M7"])[0]
+    page = ('<html><body><div data-widget="tileGridDesktop"><div class="hk3_21">'
+            + _OZON_TILE.format(i=0, href="/product/xiaomi-smartfon-poco-m7-8-256-gb-2720158833/", price="16 301",
+                                title="Xiaomi Смартфон POCO M7 8/256 ГБ, Nano-SIM, серебристый", rating="4.9", reviews="52")
+            + _OZON_TILE.format(i=1, href="/product/xiaomi-smartfon-poco-m7-6-128-gb-2952642058/", price="17 070",
+                                title="Xiaomi Смартфон POCO M7 6/128 ГБ, Nano-SIM, черный", rating="4.8", reviews="1&nbsp;245")
+            + _OZON_TILE.format(i=2, href="/product/honor-x7d-1/", price="17 819",
+                                title="Honor Смартфон X7d Ростест (EAC) 6/128 ГБ", rating="4.9", reviews="3&nbsp;835")
+              .replace("3&nbsp;835&nbsp;отзыва</span>", '3&nbsp;835</span><svg/><span class="tsBodyControl300XSmall" style="x">Ozon</span>')
+            + '</div></div></body></html>')
+    raw = src.extract(page, m, "https://www.ozon.ru/search/?text=POCO+M7")
+    assert [(o.price_rub, o.config, o.rating, o.reviews) for o in raw] == [(16301, "8/256", 4.9, 52), (17070, "6/128", 4.8, 1245),
+                                                                            (17819, "6/128", 4.9, 3835)]
+    assert raw[2].seller == "Ozon" and raw[2].official and raw[2].trusted
+    assert raw[2].title == "Honor X7d Ростест (EAC) 6/128 ГБ"          # слово «Смартфон» убрано
+    assert find_models(["Honor X7d"])[0].matches_title(raw[2].title)
+    assert raw[1].url == "https://www.ozon.ru/product/xiaomi-smartfon-poco-m7-6-128-gb-2952642058/"
+    assert not raw[0].official and raw[1].trusted
+    assert [o.price_rub for o in raw if accept(o, m)] == [17070]
+
+
+def test_dns_cards_real_markup():
+    src = all_sources()["dns"]
+    m = find_models(["POCO M7"])[0]
+    html = ('<div id="p-U67o9" data-id="product" class="catalog-product ui-button-widget" data-code="5632062">'
+            '<div class="catalog-product__name-wrapper"><a class="catalog-product__name ui-link ui-link_black" '
+            'href="/product/6a0b48154b24d0a4/69-smartfon-poco-m7-128-gb-cernyj/" '
+            'title="6.9&quot; Смартфон POCO M7 128 ГБ черный [ядер - 8x(2.8 ГГц), 6 ГБ, 2 SIM, IPS, NFC, 4G, 7000 мА*ч]" '
+            'target="_blank">6.9" Смартфон POCO M7 128 ГБ черный <span class="catalog-product__short-spec">[ядер - 8x]</span></a></div>'
+            '<div class="catalog-product__stat"><a class="catalog-product__rating" href="/product/x/?opinion" target="_blank">'
+            '<i></i><b>4.66 </b><span>|</span>521 отзыв</a></div>'
+            '<div class="product-buy__price-wrap"><div class="product-buy__price">15 999&nbsp;₽</div>'
+            '<div class="product-buy__sub">от 1 560&nbsp;₽/ мес.</div></div></div>')
+    raw = src.extract(html, m, "")
+    assert len(raw) == 1
+    o = raw[0]
+    assert (o.price_rub, o.config, o.version, o.rating, o.reviews, o.seller) == (15999, "6/128", "EAC", 4.66, 521, "DNS")
+    assert o.trusted and accept(o, m)
+    assert o.url == "https://www.dns-shop.ru/product/6a0b48154b24d0a4/69-smartfon-poco-m7-128-gb-cernyj/"

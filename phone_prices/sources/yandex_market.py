@@ -82,4 +82,4 @@ def extract(html: str, model: Model, page_url: str) -> list[Offer]:
 
 
 SOURCE = Source(key="yandex", shop=SHOP, home="https://market.yandex.ru/", urls=urls, extract=extract,
-                is_error=is_error_page)
+                is_error=is_error_page, wait_for='[data-auto="snippet-price-current"]')
