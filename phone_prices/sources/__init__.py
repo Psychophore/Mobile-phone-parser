@@ -20,6 +20,7 @@ class Source:
     extract: Extractor
     kind: str = "html"                # "html" — страница в браузере, "json" — запрос через fetch
     is_error: Callable[[str], bool] | None = None  # страница-заглушка магазина («ничего не найдено», 500)
+    capture: str | None = None        # regex адресов XHR-ответов, которые надо перехватить и отдать extract
 
 
 def all_sources() -> dict[str, Source]:

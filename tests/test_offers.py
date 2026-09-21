@@ -329,3 +329,31 @@ def test_challenge_wait(monkeypatch):
     src = all_sources()["ozon"]
     body, url, status = c._pass_challenge(src, "<title>Antibot Challenge Page</title>", 403)
     assert "POCO M7" in body and status == 200 and url.startswith("https://www.ozon.ru/")
+
+
+def test_ozon_composer_api_json():
+    src = all_sources()["ozon"]
+    m = find_models(["POCO M7"])[0]
+    state = {"items": [
+        {"action": {"link": "/product/smartfon-poco-m7-6-128-1234567/?adv=1"},
+         "mainState": [
+             {"atom": {"type": "textAtom", "textAtom": {"text": "Смартфон POCO M7 6/128 ГБ, Ростест"}}},
+             {"atom": {"type": "priceV2", "priceV2": {"price": [{"text": "13 990 ₽", "textStyle": "PRICE"},
+                                                              {"text": "17 990 ₽", "textStyle": "ORIGINAL_PRICE"}]}}},
+             {"atom": {"type": "labelList", "labelList": {"items": [
+                 {"title": "4.8", "icon": {"image": "ic_s_star_filled_compact"}},
+                 {"title": "1 245 отзывов"}]}}},
+         ]},
+        {"action": {"link": "/product/chehol-poco-m7-999/"},
+         "mainState": [{"atom": {"type": "textAtom", "textAtom": {"text": "Чехол для POCO M7"}}},
+                       {"atom": {"type": "priceV2", "priceV2": {"price": [{"text": "299 ₽", "textStyle": "PRICE"}]}}}]},
+    ]}
+    body = json.dumps({"widgetStates": {"searchResultsV2-3457893-default-1": json.dumps(state, ensure_ascii=False)}},
+                      ensure_ascii=False)
+    raw = src.extract(body, m, "https://www.ozon.ru/search/?text=POCO+M7")
+    assert [o.price_rub for o in raw] == [13990, 299]
+    assert raw[0].url == "https://www.ozon.ru/product/smartfon-poco-m7-6-128-1234567/"
+    assert raw[0].rating == 4.8 and raw[0].reviews == 1245 and raw[0].version == "EAC" and raw[0].trusted
+    kept = [o for o in raw if accept(o, m)]
+    assert len(kept) == 1
+    assert src.capture and "entrypoint-api" in src.capture

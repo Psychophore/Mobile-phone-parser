@@ -70,6 +70,8 @@ class Collector:
         self.stealth = stealth         # patchright вместо playwright (закрывает утечку CDP, которую ловит антибот Ozon)
         self._pw = self._browser = self._ctx = self._page = None
         self._warmed: set[str] = set()
+        self._captured: list[tuple[str, str]] = []   # (url, body) перехваченных XHR-ответов
+        self._capture_re: re.Pattern | None = None
 
     # -- жизненный цикл -----------------------------------------------------
     def __enter__(self):
@@ -107,7 +109,17 @@ class Collector:
         if not real_browser:
             self._ctx.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         self._page = self._ctx.new_page()  # одна вкладка на весь обход
+        self._page.on("response", self._on_response)
         return self
+
+    def _on_response(self, resp) -> None:
+        """Сохранить тело XHR-ответа, если источник просил его перехватить (Ozon: composer-api JSON)."""
+        if not self._capture_re or not self._capture_re.search(resp.url):
+            return
+        try:
+            self._captured.append((resp.url, resp.text()))
+        except Exception:
+            pass
 
     def __exit__(self, *exc):
         for obj in (self._ctx, self._browser, self._pw):
@@ -161,9 +173,11 @@ class Collector:
         if self.no_browser and src.kind != "json":
             log(f"  [{src.key}] нужен браузер, в режиме --no-browser источник пропущен")
             return
+        self._capture_re = re.compile(src.capture) if src.capture else None
         self._warm(src)
         tag = f"{src.key}_{re.sub(r'[^a-z0-9]+', '-', model.name.lower())}"
         for n, url in enumerate(src.urls(model), 1):
+            self._captured = []
             try:
                 if src.kind == "json" and self.no_browser:
                     status, body = self._get_json(url)
@@ -204,6 +218,10 @@ class Collector:
                 self._pause()
                 continue
             self._pause()
+            # перехваченные XHR-ответы — раньше HTML: в них данные без разметки
+            for i, (cap_url, cap_body) in enumerate(self._captured, 1):
+                self._dump(f"{tag}{suffix}_api{i}.json", cap_body)
+                yield cap_body, cap_url
             yield body, final_url
 
     def _pass_challenge(self, src: Source, body: str, status: int) -> tuple[str, str, int]:
