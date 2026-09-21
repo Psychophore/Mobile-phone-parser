@@ -310,3 +310,22 @@ def test_wb_rating_fields():
     a, b = src.extract(body, m, "")
     assert a.trusted and a.official and a.rating == 4.9 and a.reviews == 161 and a.seller_rating == 4.9
     assert not b.trusted and b.cross_border      # 2 оценки — мало
+
+
+def test_challenge_wait(monkeypatch):
+    from phone_prices import collector
+    from phone_prices.collector import Collector, looks_like_challenge
+    assert looks_like_challenge("<title>Antibot Challenge Page</title>")
+    assert looks_like_challenge('<script src="/__qrator/qauth_utm_v2d_v9118.js"></script>')
+    assert not looks_like_challenge('<div data-auto="searchOrganic">POCO M7</div>')
+
+    class FakePage:      # сначала две проверки, потом выдача
+        def __init__(self): self.n = 0; self.url = "https://www.ozon.ru/search/?text=x"
+        def wait_for_timeout(self, ms): pass
+        def content(self):
+            self.n += 1
+            return "<title>Antibot Challenge Page</title>" if self.n < 3 else '<div class="widget">POCO M7 12 990 ₽</div>'
+    c = Collector(dump_dir=None); c._page = FakePage()
+    src = all_sources()["ozon"]
+    body, url, status = c._pass_challenge(src, "<title>Antibot Challenge Page</title>", 403)
+    assert "POCO M7" in body and status == 200 and url.startswith("https://www.ozon.ru/")

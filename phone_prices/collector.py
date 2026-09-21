@@ -36,6 +36,15 @@ def _proxy_opts(url: str) -> dict:
     return opts
 
 
+# Страницы JS-проверки, которые проходят сами и перезагружаются: Ozon «Antibot Challenge Page», DNS (Qrator)
+_RE_CHALLENGE = re.compile(r"antibot challenge|__qrator|qauth_utm|checking your browser|Проверка браузера", re.I)
+CHALLENGE_WAIT_S = 30
+
+
+def looks_like_challenge(html: str) -> bool:
+    return bool(_RE_CHALLENGE.search(html[:20000]))
+
+
 def looks_like_captcha(html: str, url: str) -> bool:
     return "showcaptcha" in url or bool(_RE_CAPTCHA.search(html[:20000]))
 
@@ -150,6 +159,8 @@ class Collector:
                     self._page.wait_for_timeout(3000)
                     body, final_url = self._page.content(), self._page.url
                     status = resp.status if resp else 0
+                    if looks_like_challenge(body):
+                        body, final_url, status = self._pass_challenge(src, body, status)
             except Exception as e:
                 log(f"  [{src.key}] {url} -> ошибка {e.__class__.__name__}: {str(e)[:120]}")
                 self._pause()
@@ -176,6 +187,22 @@ class Collector:
                 continue
             self._pause()
             yield body, final_url
+
+    def _pass_challenge(self, src: Source, body: str, status: int) -> tuple[str, str, int]:
+        """Дать странице JS-проверки (Ozon antibot, DNS Qrator) пройти и перезагрузиться самой."""
+        log(f"  [{src.key}] страница JS-проверки, жду до {CHALLENGE_WAIT_S} с")
+        deadline = time.monotonic() + CHALLENGE_WAIT_S
+        while time.monotonic() < deadline:
+            self._page.wait_for_timeout(2000)
+            try:
+                body = self._page.content()
+            except Exception:      # страница в этот момент перезагружается
+                continue
+            if not looks_like_challenge(body):
+                log(f"  [{src.key}] проверка пройдена")
+                return body, self._page.url, 200
+        log(f"  [{src.key}] проверка не прошла за {CHALLENGE_WAIT_S} с")
+        return body, self._page.url, status
 
     def fetch(self, src: Source, model: Model) -> tuple[str, str] | None:
         """Первая удачная страница модели (для совместимости)."""
