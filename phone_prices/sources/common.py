@@ -91,16 +91,20 @@ _RE_ACCESSORY = re.compile(r"чехол|стекло|пл[её]нк|защитн
 
 
 def accept(o: Offer, model: Model) -> bool:
-    """Оставить карточку: относится к модели, не аксессуар, не 5G, конфигурация целевая или не определена."""
+    """Оставить карточку: относится к модели, не аксессуар, не 5G, конфигурация целевая или не определена.
+
+    Какие из правил применять, решает сама модель (см. `Model.skip_accessories`, `skip_5g`,
+    `min_price`): у моделей из списка включены все, свободный запрос может их снять.
+    """
     if not model.matches_title(o.title):
         return False
-    if _RE_ACCESSORY.search(o.title):
+    if model.skip_accessories and _RE_ACCESSORY.search(o.title):
         return False
-    if is_5g(o.title):
+    if model.skip_5g and is_5g(o.title):
         return False
-    if o.config not in ("?", model.config):
+    if model.config and o.config not in ("?", model.config):
         return False
-    return o.price_rub >= 3000  # аксессуары и чехлы
+    return o.price_rub >= model.min_price
 
 
 def extract_generic(html: str, model: Model, page_url: str, shop: str,

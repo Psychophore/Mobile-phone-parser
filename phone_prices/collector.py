@@ -5,6 +5,7 @@ import os
 import random
 import re
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -22,7 +23,21 @@ _RE_CAPTCHA = re.compile(r"captcha|smartcaptcha|Подтвердите, что �
 _RE_IP_BLOCK = re.compile(r"Похоже, нет соединения|Выключите VPN|Доступ к сайту [\w.\-]+ запрещен|__qrator", re.I)
 
 
+_log_sink = threading.local()   # веб-интерфейс подписывается на лог своего потока
+
+
+def set_log_sink(fn) -> None:
+    """Дублировать сообщения лога в fn (веб-интерфейс показывает их в браузере). Только для своего потока."""
+    _log_sink.fn = fn
+
+
 def log(msg: str) -> None:
+    fn = getattr(_log_sink, "fn", None)
+    if fn:
+        try:
+            fn(msg)
+        except Exception:
+            pass
     print(msg, file=sys.stderr, flush=True)
 
 

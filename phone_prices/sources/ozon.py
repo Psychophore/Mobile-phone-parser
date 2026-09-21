@@ -27,7 +27,7 @@ SHOP = "ozon.ru"
 
 
 def urls(model: Model) -> list[str]:
-    q = quote_plus(f"{model.search_query} {model.config}")
+    q = quote_plus(model.search_text)
     return [f"https://www.ozon.ru/search/?text={q}&from_global=true&category=15502"]
 
 

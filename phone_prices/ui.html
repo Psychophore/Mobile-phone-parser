@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Парсер цен</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --ink:#15181d; --muted:#6a7280; --line:#dfe3e8;
+    --accent:#2a6df4; --ok:#1f8a4c; --warn:#b26a00; --bad:#b3261e; --chip:#eef1f6;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#14171c; --card:#1b1f26; --ink:#e8eaee; --muted:#9aa3ae; --line:#2b313a;
+           --accent:#6ea0ff; --ok:#57c785; --warn:#e0a44a; --bad:#ef8279; --chip:#242a33; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:16px;background:var(--bg);color:var(--ink);
+       font:14px/1.45 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  h1{font-size:18px;margin:0 0 2px}
+  .sub{color:var(--muted);margin-bottom:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+  label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+  input[type=text],input[type=number],select{width:100%;padding:8px 10px;border:1px solid var(--line);
+       border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+  input[type=text]:focus,input[type=number]:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+  .grow{flex:1 1 320px}
+  .w90{width:96px} .w120{width:128px}
+  .checks{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px}
+  .checks label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink);margin:0;cursor:pointer}
+  button{padding:9px 16px;border-radius:8px;border:1px solid var(--line);background:var(--chip);
+         color:var(--ink);font:inherit;cursor:pointer}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  button:disabled{opacity:.5;cursor:default}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .chip{padding:4px 10px;border-radius:999px;background:var(--chip);border:1px solid var(--line);
+        font-size:12px;cursor:pointer}
+  details{margin-top:12px} summary{cursor:pointer;color:var(--muted);font-size:13px}
+  .status{display:flex;gap:10px;align-items:center;color:var(--muted)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+  .dot.run{background:var(--accent);animation:pulse 1s infinite}
+  .dot.ok{background:var(--ok)} .dot.err{background:var(--bad)}
+  @keyframes pulse{50%{opacity:.25}}
+  pre{white-space:pre-wrap;font:12px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;
+      background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;
+      max-height:260px;overflow:auto;margin:8px 0 0}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th{font-size:12px;color:var(--muted);cursor:pointer;white-space:nowrap;user-select:none}
+  td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  a{color:var(--accent)}
+  .tag{font-size:11px;padding:1px 6px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .tag.ok{color:var(--ok);border-color:var(--ok)} .tag.warn{color:var(--warn);border-color:var(--warn)}
+  .empty{color:var(--muted);padding:10px 0}
+</style>
+</head>
+<body>
+<h1>Парсер цен</h1>
+<div class="sub">Ключевые слова вводите сами — обход магазинов, фильтры и таблица те же, что в консоли.</div>
+
+<div class="card">
+  <div class="row">
+    <div class="grow">
+      <label for="q">Что искать</label>
+      <input id="q" type="text" placeholder="например: POCO M7 6/128 или чайник электрический 1.7" autofocus>
+    </div>
+    <div class="w90"><label for="ram">ОЗУ, ГБ</label><input id="ram" type="number" min="0" placeholder="—"></div>
+    <div class="w90"><label for="rom">Память, ГБ</label><input id="rom" type="number" min="0" placeholder="—"></div>
+    <div class="w120"><label for="pmin">Цена от</label><input id="pmin" type="number" min="0" placeholder="—"></div>
+    <div class="w120"><label for="pmax">Цена до</label><input id="pmax" type="number" min="0" placeholder="—"></div>
+  </div>
+
+  <div class="checks" id="sources"></div>
+
+  <div class="checks">
+    <label><input type="checkbox" id="trusted" checked> только проверенные продавцы</label>
+    <label><input type="checkbox" id="nooutliers" checked> убирать выбросы (дороже 2× медианы)</label>
+    <label><input type="checkbox" id="variants" checked> без модификаций (Pro, Plus, Max)</label>
+    <label><input type="checkbox" id="acc"> оставлять аксессуары</label>
+    <label><input type="checkbox" id="g5"> оставлять 5G</label>
+  </div>
+
+  <div class="chips" id="presets"></div>
+
+  <details>
+    <summary>Ещё настройки: браузер, прокси, разбор сохранённой страницы</summary>
+    <div class="checks">
+      <label><input type="checkbox" id="headed"> показывать окно браузера</label>
+      <label><input type="checkbox" id="stealth"> patchright (--stealth)</label>
+      <label><input type="checkbox" id="nobrowser"> без браузера (только WB)</label>
+      <label><input type="checkbox" id="dumps" checked> сохранять страницы в dumps/</label>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div class="w120">
+        <label for="channel">Браузер</label>
+        <select id="channel">
+          <option value="">Chromium Playwright</option>
+          <option value="chrome">системный Chrome</option>
+          <option value="msedge">системный Edge</option>
+        </select>
+      </div>
+      <div class="w120"><label for="profile">Профиль</label><input id="profile" type="text" placeholder=".profile"></div>
+      <div class="grow"><label for="proxy">Прокси</label><input id="proxy" type="text" placeholder="socks5://host:1080"></div>
+      <div class="w90"><label for="pause1">Пауза от, с</label><input id="pause1" type="number" min="0" value="3"></div>
+      <div class="w90"><label for="pause2">до, с</label><input id="pause2" type="number" min="0" value="7"></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div class="grow">
+        <label for="dump">Разобрать сохранённый файл (путь на этом компьютере; обход не запускается)</label>
+        <input id="dump" type="text" placeholder="dumps/ozon_poco-m7.html">
+      </div>
+      <div class="w120"><label for="dumpsrc">Магазин файла</label><select id="dumpsrc"></select></div>
+    </div>
+  </details>
+
+  <div class="row" style="margin-top:14px">
+    <button class="primary" id="go">Искать</button>
+    <button id="stop" disabled>Стоп</button>
+    <button id="csv" disabled>Скачать CSV</button>
+    <div class="status"><span class="dot" id="dot"></span><span id="status">готов</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between">
+    <strong id="found">Результаты</strong>
+    <div class="grow" style="max-width:320px">
+      <input id="filter" type="text" placeholder="фильтр по названию или продавцу">
+    </div>
+  </div>
+  <div id="table"></div>
+  <pre id="summary" hidden></pre>
+  <details id="logbox"><summary>Лог обхода</summary><pre id="log"></pre></details>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let jobId = null, since = 0, timer = null, rows = [], sortKey = "price_rub", sortDir = 1;
+
+const money = n => (n ?? 0).toLocaleString("ru-RU") + " ₽";
+
+async function boot(){
+  const r = await fetch("/api/models").then(r => r.json());
+  $("sources").innerHTML = r.sources.map((s, i) =>
+    `<label><input type="checkbox" class="src" value="${s.key}" ${s.key === "yandex" || s.key === "wb" ? "checked" : ""}> ${s.shop}</label>`).join("");
+  $("dumpsrc").innerHTML = r.sources.map(s => `<option value="${s.key}">${s.shop}</option>`).join("");
+  $("presets").innerHTML = r.models.map(m =>
+    `<span class="chip" data-name="${m.name}" data-ram="${m.ram}" data-rom="${m.rom}">${m.name} ${m.ram}/${m.rom}</span>`).join("");
+  $("presets").onclick = e => {
+    const c = e.target.closest(".chip"); if (!c) return;
+    $("q").value = c.dataset.name; $("ram").value = c.dataset.ram; $("rom").value = c.dataset.rom;
+  };
+}
+
+function form(){
+  return {
+    query: $("q").value, ram: $("ram").value, rom: $("rom").value,
+    sources: [...document.querySelectorAll(".src:checked")].map(c => c.value),
+    price_min: $("pmin").value, price_max: $("pmax").value,
+    trusted_only: $("trusted").checked, no_outliers: $("nooutliers").checked,
+    drop_variants: $("variants").checked, accessories: $("acc").checked, allow_5g: $("g5").checked,
+    headed: $("headed").checked, stealth: $("stealth").checked, no_browser: $("nobrowser").checked,
+    dumps: $("dumps").checked, channel: $("channel").value, profile: $("profile").value,
+    proxy: $("proxy").value, pause: [$("pause1").value || 0, $("pause2").value || 0],
+    from_html: $("dump").value, from_html_source: $("dumpsrc").value,
+  };
+}
+
+function setStatus(text, cls){ $("status").textContent = text; $("dot").className = "dot " + (cls || ""); }
+
+async function start(){
+  const p = form();
+  if (!p.query.trim()) { setStatus("введите ключевые слова", "err"); $("q").focus(); return; }
+  rows = []; since = 0; $("log").textContent = ""; $("table").innerHTML = ""; $("summary").hidden = true;
+  $("found").textContent = "Результаты"; $("csv").disabled = true;
+  const r = await fetch("/api/search", {method:"POST", headers:{"Content-Type":"application/json"},
+                                        body: JSON.stringify(p)});
+  const j = await r.json();
+  if (!r.ok) { setStatus(j.error || "не вышло", "err"); return; }
+  jobId = j.id; $("go").disabled = true; $("stop").disabled = false;
+  $("logbox").open = true;
+  setStatus("идёт поиск…", "run");
+  timer = setInterval(poll, 1000);
+  poll();
+}
+
+async function poll(){
+  if (!jobId) return;
+  const s = await fetch(`/api/job?id=${jobId}&since=${since}`).then(r => r.json());
+  if (s.lines && s.lines.length){
+    since = s.next;
+    $("log").textContent += s.lines.join("\n") + "\n";
+    $("log").scrollTop = $("log").scrollHeight;
+    const last = s.lines[s.lines.length - 1];
+    if (!s.done) setStatus(last.length > 90 ? last.slice(0, 90) + "…" : last, "run");
+  }
+  if (!s.done) return;
+  clearInterval(timer); timer = null;
+  $("go").disabled = false; $("stop").disabled = true;
+  rows = s.rows || [];
+  $("csv").disabled = rows.length === 0;
+  if (s.summary){ $("summary").textContent = s.summary; $("summary").hidden = false; }
+  setStatus(s.error ? "ошибка: " + s.error : `найдено предложений: ${rows.length}`, s.error ? "err" : "ok");
+  draw();
+}
+
+function draw(){
+  const f = $("filter").value.trim().toLowerCase();
+  let view = rows.filter(r => !f || (r.title + " " + r.seller).toLowerCase().includes(f));
+  view.sort((a, b) => {
+    const x = a[sortKey], y = b[sortKey];
+    if (typeof x === "number" || typeof y === "number") return ((x ?? 0) - (y ?? 0)) * sortDir;
+    return String(x ?? "").localeCompare(String(y ?? ""), "ru") * sortDir;
+  });
+  $("found").textContent = `Результаты: ${view.length}` + (view.length !== rows.length ? ` из ${rows.length}` : "");
+  if (!view.length){ $("table").innerHTML = '<div class="empty">Пока ничего нет.</div>'; return; }
+  const cols = [["price_rub","Цена"],["shop","Магазин"],["config","Конфиг."],["version","Версия"],
+                ["rating","Рейтинг"],["reviews","Оценок"],["seller","Продавец"],["title","Название"]];
+  const head = cols.map(([k, t]) => `<th data-k="${k}">${t}${sortKey === k ? (sortDir > 0 ? " ↑" : " ↓") : ""}</th>`).join("");
+  const body = view.map(r => `<tr>
+      <td class="num"><b>${money(r.price_rub)}</b> ${r.trusted ? '<span class="tag ok">✓</span>' : ''}
+          ${r.cross_border ? '<span class="tag warn">из-за рубежа</span>' : ''}</td>
+      <td>${r.shop}</td><td>${r.config}</td><td>${r.version}</td>
+      <td class="num">${r.rating ? Number(r.rating).toFixed(1) : "—"}</td><td class="num">${r.reviews ?? 0}</td>
+      <td>${esc(r.seller) || "—"}</td>
+      <td><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.title)}</a></td></tr>`).join("");
+  $("table").innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  $("table").querySelectorAll("th").forEach(th => th.onclick = () => {
+    const k = th.dataset.k;
+    sortDir = (k === sortKey) ? -sortDir : 1; sortKey = k; draw();
+  });
+}
+
+function esc(s){ return String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+$("go").onclick = start;
+$("q").addEventListener("keydown", e => { if (e.key === "Enter" && !$("go").disabled) start(); });
+$("stop").onclick = async () => {
+  await fetch("/api/stop", {method:"POST", headers:{"Content-Type":"application/json"},
+                            body: JSON.stringify({id: jobId})});
+  setStatus("останавливаю после текущего магазина…", "run");
+};
+$("csv").onclick = () => { if (jobId) location.href = `/api/csv?id=${jobId}`; };
+$("filter").oninput = draw;
+boot();
+</script>
+</body>
+</html>

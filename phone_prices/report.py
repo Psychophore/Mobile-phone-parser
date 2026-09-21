@@ -2,18 +2,24 @@
 from __future__ import annotations
 
 import csv
+import io
 from pathlib import Path
 
 from .models import BUDGET_HIGH, BUDGET_LOW, Model
 from .offers import CSV_FIELDS, Offer
 
 
+def csv_text(offers: list[Offer]) -> str:
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=CSV_FIELDS, lineterminator="\r\n")
+    w.writeheader()
+    for o in sorted(offers, key=lambda o: (o.model, not o.trusted, o.reviews == 0, o.price_rub)):
+        w.writerow(o.as_row())
+    return buf.getvalue()
+
+
 def write_csv(offers: list[Offer], path: Path) -> None:
-    with path.open("w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=CSV_FIELDS)
-        w.writeheader()
-        for o in sorted(offers, key=lambda o: (o.model, not o.trusted, o.reviews == 0, o.price_rub)):
-            w.writerow(o.as_row())
+    path.write_text(csv_text(offers), encoding="utf-8", newline="")
 
 
 def budget_tag(price: int | None) -> str:

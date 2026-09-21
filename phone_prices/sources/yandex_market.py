@@ -36,7 +36,7 @@ _RE_ABROAD = re.compile(r"Из-за рубежа", re.I)
 
 def urls(model: Model) -> list[str]:
     q = quote_plus(model.search_query)
-    qc = quote_plus(f"{model.search_query} {model.config}")
+    qc = quote_plus(model.search_text)
     return [
         f"https://market.yandex.ru/search?text={q}&hid={HID_SMARTPHONES}&how=aprice&lr={LR_MOSCOW}",
         f"https://market.yandex.ru/search?text={qc}&how=aprice&lr={LR_MOSCOW}",

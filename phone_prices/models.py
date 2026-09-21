@@ -10,12 +10,23 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class Model:
+    """Модель из списка или свободный запрос (см. `phone_prices/query.py`).
+
+    Поля после `note` задают правила отбора карточек (`sources/common.py::accept`): у моделей из
+    списка они остаются по умолчанию, свободный запрос из веб-интерфейса меняет их под себя.
+    """
+
     name: str                 # каноническое имя, как в отчёте
-    ram: int                  # целевая ОЗУ, ГБ
-    rom: int                  # целевой накопитель, ГБ
+    ram: int                  # целевая ОЗУ, ГБ (0 — конфигурация не важна)
+    rom: int                  # целевой накопитель, ГБ (0 — конфигурация не важна)
     query: str = ""           # поисковый запрос в магазине (по умолчанию имя)
     aliases: tuple[str, ...] = field(default_factory=tuple)  # как ещё пишут название
     note: str = ""
+    match: str = "phrase"     # "phrase" — слова названия подряд; "words" — все слова запроса в любом порядке
+    drop_variants: bool = True  # в режиме "words": отбрасывать модификации (Pro, Plus, Max), если их нет в запросе
+    skip_accessories: bool = True   # отсеивать чехлы, стёкла, зарядки
+    skip_5g: bool = True            # отсеивать 5G-версии
+    min_price: int = 3000           # дешевле — точно не тот товар
 
     @property
     def search_query(self) -> str:
@@ -23,16 +34,24 @@ class Model:
 
     @property
     def config(self) -> str:
-        return f"{self.ram}/{self.rom}"
+        return f"{self.ram}/{self.rom}" if self.ram and self.rom else ""
+
+    @property
+    def search_text(self) -> str:
+        """Строка для поля поиска магазина: запрос плюс конфигурация, если она задана."""
+        return f"{self.search_query} {self.config}".strip()
 
     def matches_title(self, title: str) -> bool:
-        """Название карточки относится к этой модели.
-
-        Слова названия должны идти в карточке подряд (Redmi 15C и Redmi Note 15 — не Redmi 15,
-        realme C75 — не C67), а слово сразу после них не должно быть суффиксом другой
-        модификации (M7 Pro, Spark 40 Pro Plus).
-        """
+        """Название карточки относится к этой модели."""
         words = _norm(title).split()
+        if self.match == "words":
+            return self._matches_words(words)
+        return self._matches_phrase(words)
+
+    def _matches_phrase(self, words: list[str]) -> bool:
+        """Слова названия идут в карточке подряд (Redmi 15C и Redmi Note 15 — не Redmi 15,
+        realme C75 — не C67), а слово сразу после них не суффикс другой модификации
+        (M7 Pro, Spark 40 Pro Plus)."""
         for cand in (self.name, *self.aliases):
             tokens = _norm(cand).split()
             n = len(tokens)
@@ -41,9 +60,28 @@ class Model:
                     return True
         return False
 
+    def _matches_words(self, words: list[str]) -> bool:
+        """Все слова запроса есть в названии в любом порядке («чайник электрический» —
+        «Чайник Bosch электрический 1.7 л»). Слова с цифрами сверяются целиком (M7 — не M70),
+        остальные — по началу слова, чтобы падежи не мешали («чайник» — «чайника»)."""
+        tokens = _norm(self.search_query).split()
+        if not tokens:
+            return False
+        if not all(_word_hit(t, words) for t in tokens):
+            return False
+        if self.drop_variants and any(w in _VARIANT_SUFFIXES and w not in tokens for w in words):
+            return False
+        return True
+
 
 # Слова, которые сразу после названия означают другую модель (POCO M7 Pro, Tecno Spark 40 Pro Plus)
 _VARIANT_SUFFIXES = frozenset({"pro", "plus", "max", "ultra", "lite", "neo", "mini", "prime", "power", "play"})
+
+
+def _word_hit(token: str, words: list[str]) -> bool:
+    if any(ch.isdigit() for ch in token):
+        return token in words
+    return any(w.startswith(token) for w in words)
 
 
 def _norm(s: str) -> str:

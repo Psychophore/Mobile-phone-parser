@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from phone_prices.models import find_models
+from phone_prices.query import build_query
 from phone_prices.offers import Offer, drop_outliers, is_5g, parse_config, parse_price, parse_version
 from phone_prices.sources import all_sources
 from phone_prices.sources.common import accept
@@ -428,3 +429,99 @@ def test_dns_cards_real_markup():
     analog = html.replace('href="/product/6a0b48154b24d0a4/69-smartfon-poco-m7-128-gb-cernyj/"',
                           'href="https://www.dns-shop.ru/product/analog/6a0b48154b24d0a4/69-smartfon-poco-m7-128-gb-cernyj/"')
     assert src.extract(analog, m, "") == []          # нет в наличии — ссылка на аналоги
+
+
+# -- свободный поиск и веб-интерфейс ----------------------------------------
+
+def test_build_query_takes_config_from_text():
+    q = build_query("POCO M7 6/128")
+    assert (q.search_query, q.config, q.search_text) == ("POCO M7", "6/128", "POCO M7 6/128")
+    assert q.matches_title("Смартфон POCO M7 6/128 ГБ черный")
+    assert not q.matches_title("Смартфон POCO M7 Pro 6/128 ГБ")   # модификация
+    assert not q.matches_title("Смартфон POCO M70 6/128 ГБ")      # слова с цифрами сверяются целиком
+
+
+def test_build_query_words_in_any_order():
+    q = build_query("чайник электрический", accessories=True, min_price=0)
+    assert q.config == "" and q.search_text == "чайник электрический"
+    assert q.matches_title("Чайник электрический Bosch 1.7 л")
+    assert q.matches_title("Электрический чайника носик")        # падежи не мешают
+    assert not q.matches_title("Кофеварка Bosch")
+
+
+def test_accept_respects_query_rules():
+    q = build_query("POCO M7", accessories=True, allow_5g=True, min_price=0)
+    case = Offer(q.name, "?", "x", 700, "?", "", "Чехол для POCO M7", "u")
+    assert accept(case, q)                       # аксессуары оставлены намеренно
+    other_cfg = Offer(q.name, "8/256", "x", 15000, "?", "", "POCO M7 8/256", "u")
+    assert accept(other_cfg, q)                  # конфигурация не задана — не фильтруем
+    strict = build_query("POCO M7 6/128")
+    assert not accept(other_cfg, strict)
+    assert not accept(case, strict)
+
+
+def test_models_from_list_keep_phrase_matching():
+    m = find_models(["POCO M7"])[0]
+    assert m.match == "phrase" and m.config == "6/128" and m.search_text == "POCO M7 6/128"
+    assert m.matches_title("Смартфон POCO M7 6/128")
+    assert not m.matches_title("M7 POCO 6/128")   # строгий порядок слов сохранился
+
+
+def test_webui_search_over_saved_dump(tmp_path):
+    """Сквозная проверка веб-интерфейса: запуск поиска по сохранённому файлу, таблица и CSV."""
+    import http.client
+    import threading
+    import time
+    from http.server import ThreadingHTTPServer
+
+    from phone_prices import webui
+
+    dump = tmp_path / "wb.json"
+    dump.write_text(json.dumps({"data": {"products": [
+        {"id": 1, "brand": "POCO", "name": "Смартфон M7 6/128 ГБ", "reviewRating": 4.8, "feedbacks": 120,
+         "supplier": "ООО Магазин", "supplierRating": 4.9, "sizes": [{"price": {"product": 1299000}}]},
+        {"id": 2, "brand": "POCO", "name": "Смартфон M7 Pro 6/128 ГБ", "reviewRating": 4.9, "feedbacks": 90,
+         "supplier": "ООО Магазин", "sizes": [{"price": {"product": 1799000}}]},
+    ]}}, ensure_ascii=False), encoding="utf-8")
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), webui.Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    port = srv.server_address[1]
+    try:
+        def call(method, path, body=None):
+            c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+            c.request(method, path, json.dumps(body) if body is not None else None,
+                      {"Content-Type": "application/json"})
+            r = c.getresponse()
+            return r.status, r.read().decode("utf-8")
+
+        status, body = call("GET", "/")
+        assert status == 200 and "Парсер цен" in body
+
+        status, body = call("POST", "/api/search", {"query": "POCO M7 6/128", "sources": ["wb"],
+                                                    "from_html": str(dump), "from_html_source": "wb"})
+        assert status == 200, body
+        job_id = json.loads(body)["id"]
+
+        for _ in range(100):
+            status, body = call("GET", f"/api/job?id={job_id}&since=0")
+            state = json.loads(body)
+            if state["done"]:
+                break
+            time.sleep(0.05)
+        assert state["done"] and not state["error"], state
+        titles = [r["title"] for r in state["rows"]]
+        assert titles == ["POCO M7 6/128 ГБ"]          # модификация Pro отброшена
+        assert state["rows"][0]["price_rub"] == 12990
+
+        status, csv_body = call("GET", f"/api/csv?id={job_id}")
+        assert status == 200 and "12990" in csv_body
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_webui_rejects_empty_query():
+    from phone_prices import webui
+    body, code = webui.start_job({"query": "  "})
+    assert code == 400 and "запрос" in body["error"]

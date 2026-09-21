@@ -21,7 +21,7 @@ SHOP = "dns-shop.ru"
 
 
 def urls(model: Model) -> list[str]:
-    return [f"https://www.dns-shop.ru/search/?q={quote_plus(model.search_query + ' ' + model.config)}&category=17a8a01d16404e77"]
+    return [f"https://www.dns-shop.ru/search/?q={quote_plus(model.search_text)}&category=17a8a01d16404e77"]
 
 
 _RE_NAME = re.compile(r'<a[^>]+class="catalog-product__name[^"]*"[^>]+href="([^"]+)"([^>]*)>(.*?)</a>', re.S)

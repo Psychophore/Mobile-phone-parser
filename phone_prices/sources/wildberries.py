@@ -24,7 +24,7 @@ _RE_CATEGORY_PREFIX = re.compile(r"^\s*(?:мобильный\s+)?(?:смартф
 
 
 def urls(model: Model) -> list[str]:
-    q = quote_plus(f"{model.search_query} {model.config}")
+    q = quote_plus(model.search_text)
     return [
         "https://search.wb.ru/exactmatch/ru/common/v9/search?appType=1&curr=rub&dest=-1257786"
         f"&query={q}&resultset=catalog&sort=priceup&spp=30&suppressSpellcheck=false",

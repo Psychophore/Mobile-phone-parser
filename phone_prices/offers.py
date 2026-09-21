@@ -69,6 +69,19 @@ def parse_config(title: str) -> str:
     return f"{m.group(1)}/{m.group(2)}" if m else "?"
 
 
+def split_config(text: str) -> tuple[str, str]:
+    """Отделить конфигурацию от запроса: «POCO M7 6/128» -> («POCO M7», «6/128»).
+
+    Без конфигурации возвращает (текст, "?"). Нужно свободному поиску: конфигурация идёт
+    в фильтр, остальные слова — в поисковую строку магазина.
+    """
+    m = _RE_CFG.search(text)
+    if not m:
+        return " ".join(text.split()), "?"
+    rest = text[:m.start()] + " " + text[m.end():]
+    return " ".join(rest.split()), f"{m.group(1)}/{m.group(2)}"
+
+
 def is_5g(title: str) -> bool:
     return bool(_RE_5G.search(title))
 

@@ -2,7 +2,9 @@
 """Сбор актуальных цен на бюджетные смартфоны (market.yandex.ru, ozon.ru, wildberries.ru, dns-shop.ru).
 
 Примеры:
+  python parse_prices.py --ui                                     # веб-интерфейс: ключевые слова в браузере
   python parse_prices.py --models "POCO M7" --sources yandex     # проверка одной модели
+  python parse_prices.py -q "чайник электрический" -s wb          # свободный поиск по ключевым словам
   python parse_prices.py                                          # все модели, все источники
   python parse_prices.py --from-html page.html --source yandex --model "POCO M7"   # разбор сохранённой страницы
 """
@@ -15,6 +17,7 @@ from pathlib import Path
 from phone_prices.collector import Collector, log
 from phone_prices.models import MODELS, find_models
 from phone_prices.offers import drop_outliers
+from phone_prices.query import build_query
 from phone_prices.report import summary, write_csv
 from phone_prices.sources import all_sources
 from phone_prices.sources.common import accept, read_page
@@ -24,6 +27,10 @@ def main(argv: list[str] | None = None) -> int:
     sources = all_sources()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--models", "-m", nargs="*", help="подстроки названий моделей; по умолчанию все")
+    ap.add_argument("--query", "-q", help="свободный поиск по ключевым словам вместо списка моделей, "
+                                          "напр. -q \"POCO M7 6/128\" или -q \"чайник электрический\"")
+    ap.add_argument("--ram", type=int, default=0, help="для --query: целевая ОЗУ, ГБ")
+    ap.add_argument("--rom", type=int, default=0, help="для --query: целевой накопитель, ГБ")
     ap.add_argument("--sources", "-s", nargs="*", default=list(sources), choices=list(sources),
                     help="источники по приоритету (по умолчанию все)")
     ap.add_argument("--out", "-o", type=Path, default=Path("prices.csv"))
@@ -50,19 +57,28 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--source", choices=list(sources), help="для --from-html: какой магазин")
     ap.add_argument("--model", help="для --from-html: какая модель")
     ap.add_argument("--list", action="store_true", help="показать список моделей и выйти")
+    ap.add_argument("--ui", action="store_true",
+                    help="веб-интерфейс вместо консоли: ключевые слова вводятся в браузере "
+                         "(http://127.0.0.1:8765, только с этого компьютера)")
+    ap.add_argument("--port", type=int, default=8765, help="порт веб-интерфейса")
     a = ap.parse_args(argv)
+
+    if a.ui:
+        from phone_prices.webui import serve
+        return serve(a.port)
 
     if a.list:
         for m in MODELS:
             print(f"{m.name:<26} {m.config:<6} {m.note}")
         return 0
 
-    models = find_models(a.models)
+    models = [build_query(a.query, ram=a.ram, rom=a.rom)] if a.query else find_models(a.models)
 
     if a.from_html:
-        if not (a.source and a.model):
-            ap.error("--from-html требует --source и --model")
-        src, model = sources[a.source], find_models([a.model])[0]
+        if not a.source or not (a.model or a.query):
+            ap.error("--from-html требует --source и --model (или --query)")
+        src = sources[a.source]
+        model = models[0] if a.query else find_models([a.model])[0]
         raw = src.extract(read_page(a.from_html), model, src.home)
         offers = [o for o in raw if accept(o, model)]
         log(f"[{src.key}] {model.name}: карточек {len(raw)}, подходящих {len(offers)}")
