@@ -58,7 +58,7 @@ class Collector:
     def __init__(self, *, headless: bool = True, min_pause: float = 3.0, max_pause: float = 7.0,
                  dump_dir: Path | None = None, chromium: str | None = None,
                  profile_dir: Path | None = None, proxy: str | None = None,
-                 no_browser: bool = False, channel: str | None = None):
+                 no_browser: bool = False, channel: str | None = None, stealth: bool = False):
         self.headless = headless
         self.min_pause, self.max_pause = min_pause, max_pause
         self.dump_dir = dump_dir
@@ -67,6 +67,7 @@ class Collector:
         self.proxy = proxy or os.environ.get("PARSER_PROXY")
         self.no_browser = no_browser   # без Playwright: только JSON-источники через urllib (Termux, слабые машины)
         self.channel = channel         # "chrome" / "msedge": установленный в системе браузер вместо Chromium Playwright
+        self.stealth = stealth         # patchright вместо playwright (закрывает утечку CDP, которую ловит антибот Ozon)
         self._pw = self._browser = self._ctx = self._page = None
         self._warmed: set[str] = set()
 
@@ -74,7 +75,13 @@ class Collector:
     def __enter__(self):
         if self.no_browser:
             return self
-        from playwright.sync_api import sync_playwright
+        if self.stealth:
+            try:
+                from patchright.sync_api import sync_playwright
+            except ImportError:
+                raise SystemExit("--stealth требует patchright: pip install patchright")
+        else:
+            from playwright.sync_api import sync_playwright
         self._pw = sync_playwright().start()
         launch = dict(headless=self.headless, args=["--disable-blink-features=AutomationControlled"])
         if self.chromium:
@@ -83,14 +90,22 @@ class Collector:
             launch["channel"] = self.channel
         if self.proxy:
             launch["proxy"] = _proxy_opts(self.proxy)
-        ctx_opts = dict(user_agent=USER_AGENT, locale="ru-RU", timezone_id="Europe/Moscow",
-                        viewport={"width": 1366, "height": 800})
+        real_browser = bool(self.channel)
+        ctx_opts = dict(locale="ru-RU", timezone_id="Europe/Moscow")
+        if not real_browser:
+            # Chromium Playwright без подмены выглядит как headless-сборка; настоящему Chrome ничего
+            # подменять нельзя: UA должен совпадать с Client Hints самого браузера, а внедрённые
+            # скрипты антибот видит.
+            ctx_opts.update(user_agent=USER_AGENT, viewport={"width": 1366, "height": 800})
+        else:
+            ctx_opts["no_viewport"] = True
         if self.profile_dir:
             self._ctx = self._pw.chromium.launch_persistent_context(str(self.profile_dir), **launch, **ctx_opts)
         else:
             self._browser = self._pw.chromium.launch(**launch)
             self._ctx = self._browser.new_context(**ctx_opts)
-        self._ctx.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        if not real_browser:
+            self._ctx.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         self._page = self._ctx.new_page()  # одна вкладка на весь обход
         return self
 

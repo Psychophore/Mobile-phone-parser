@@ -35,6 +35,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--channel", choices=["chrome", "msedge", "chrome-beta", "msedge-beta"],
                     help="использовать установленный в системе Chrome/Edge вместо Chromium Playwright "
                          "(антибот Ozon хуже распознаёт настоящий браузер)")
+    ap.add_argument("--stealth", action="store_true",
+                    help="использовать patchright вместо playwright (pip install patchright): закрывает утечку "
+                         "протокола отладки, по которой антибот Ozon распознаёт управляемый браузер")
     ap.add_argument("--proxy", help="прокси для браузера, напр. socks5://user:pass@host:1080 "
                                     "(или переменная PARSER_PROXY); нужен российский адрес для Ozon и DNS")
     ap.add_argument("--no-browser", action="store_true",
@@ -74,7 +77,8 @@ def main(argv: list[str] | None = None) -> int:
         dump = a.dump if str(a.dump) else None
         with Collector(headless=not a.headed, min_pause=a.pause[0], max_pause=a.pause[1],
                        dump_dir=dump, chromium=a.chromium, profile_dir=a.profile, proxy=a.proxy,
-                       no_browser=a.no_browser, channel=a.channel) as c:
+                       no_browser=a.no_browser, channel=a.channel,
+                       stealth=a.stealth) as c:
             for key in a.sources:
                 src = sources[key]
                 log(f"== {src.shop}")
