@@ -4,3 +4,5 @@ __pycache__/
 dumps/
 prices.csv
 .profile/
+data/events.jsonl
+affiliate.json

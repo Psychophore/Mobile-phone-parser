@@ -21,7 +21,7 @@
 ## Как работать
 
 ```bash
-python -m pytest -q tests                       # 38 тестов, фрагменты реальных дампов
+python -m pytest -q tests                       # тесты парсера (фрагменты реальных дампов) и бота
 python parse_prices.py --ui                     # веб-интерфейс владельца: ключевые слова в браузере
 python parse_prices.py -q "POCO M7 6/128" -s wb # свободный поиск из консоли
 python parse_prices.py --models "POCO M7" --sources yandex     # одна модель, один источник
@@ -50,6 +50,12 @@ python parse_prices.py --from-html dumps/ozon_poco-m7.html --source ozon --model
   библиотеки нет, поиск в отдельном потоке, лог через `collector.set_log_sink`.
 - `phone_prices/offers.py` — разбор конфигурации, версии (Ростест/Global), цены, правило `trusted`.
 - `phone_prices/report.py` — CSV и сводка.
+
+- `bot.py` + пакет `advisor/` — бот-консультант (MVP этапа 2 из ROADMAP): `catalog.py` и
+  `data/smartphones.json` — характеристики (имена моделей как в `MODELS`, неизвестное — null, не угадывать),
+  `recommend.py` — правила подбора и веса приоритетов, `prices.py` — лучшие цены из CSV в `data/prices/`,
+  `dialog.py` — диалог без привязки к мессенджеру, `telegram.py` — Bot API на urllib, `affiliate.py` —
+  шаблоны партнёрских ссылок, `events.py` — журнал и `--stats`. Проверка без Telegram: `python bot.py --console`.
 
 ## Доступность магазинов
 

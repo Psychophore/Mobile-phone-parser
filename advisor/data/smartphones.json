@@ -1,0 +1,19 @@
+{
+  "category": "smartphones",
+  "source": "Документ «Handoff: подбор смартфона до 15 тыс.», рейтинги Афиши Daily (01.04.2026) и КП. null — характеристика не подтверждена.",
+  "items": [
+    {"model": "Samsung Galaxy A17 4G", "chip": "Helio G99", "screen_type": "AMOLED", "resolution": null, "refresh_hz": 90, "battery_mah": 5000, "nfc": true},
+    {"model": "POCO M7", "chip": "Snapdragon 685", "screen_type": "IPS", "resolution": "FHD+", "refresh_hz": 144, "battery_mah": 7000, "nfc": false},
+    {"model": "Xiaomi Redmi 15", "chip": "Snapdragon 685", "screen_type": "IPS", "resolution": null, "refresh_hz": null, "battery_mah": 7000, "nfc": null},
+    {"model": "realme C67", "chip": "Snapdragon 685", "screen_type": "IPS", "resolution": "FHD+", "refresh_hz": 90, "battery_mah": 5000, "nfc": true},
+    {"model": "Honor X8c", "chip": "Snapdragon 685", "screen_type": "AMOLED", "resolution": null, "refresh_hz": null, "battery_mah": 5000, "nfc": null},
+    {"model": "OPPO A5 4G", "chip": "Snapdragon 6s Gen 1", "screen_type": "IPS", "resolution": null, "refresh_hz": 90, "battery_mah": 6000, "nfc": true},
+    {"model": "Tecno Spark 40 Pro", "chip": "Helio G100", "screen_type": "AMOLED", "resolution": null, "refresh_hz": 144, "battery_mah": 5200, "nfc": false},
+    {"model": "Tecno Pova 6 Neo", "chip": "Helio G99 Ultimate", "screen_type": "IPS", "resolution": null, "refresh_hz": null, "battery_mah": 7000, "nfc": null},
+    {"model": "Honor X7d", "chip": "Snapdragon 685", "screen_type": "IPS", "resolution": "HD+", "refresh_hz": 120, "battery_mah": 6500, "nfc": false},
+    {"model": "Infinix Hot 50i", "chip": "Helio G81", "screen_type": "IPS", "resolution": null, "refresh_hz": null, "battery_mah": 5000, "nfc": null},
+    {"model": "Samsung Galaxy A07", "chip": "Helio G99", "screen_type": null, "resolution": "HD+", "refresh_hz": null, "battery_mah": 5000, "nfc": null},
+    {"model": "Xiaomi Redmi 14C", "chip": "Helio G81 Ultra", "screen_type": null, "resolution": "HD+", "refresh_hz": null, "battery_mah": 5160, "nfc": null},
+    {"model": "Xiaomi Redmi Note 14 4G", "chip": "Helio G99 Ultra", "screen_type": "AMOLED", "resolution": null, "refresh_hz": 120, "battery_mah": 5500, "nfc": false}
+  ]
+}

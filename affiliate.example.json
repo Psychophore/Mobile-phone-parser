@@ -1,0 +1,7 @@
+{
+  "label": "Реклама. <наименование рекламодателя>, ИНН <ИНН>, erid: <токен из ОРД или CPA-сети>",
+  "shops": {
+    "wildberries.ru": {"template": "https://<ссылка из кабинета CPA-сети>/?ulp={url_enc}&subid={subid}"},
+    "market.yandex.ru": {"template": "https://<ссылка из кабинета партнёрской программы>?url={url_enc}&clid={subid}"}
+  }
+}
