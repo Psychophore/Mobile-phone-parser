@@ -134,6 +134,11 @@ def test_plural_and_shop_button(tmp_path):
     adv = advisor(tmp_path, [{"model": "POCO M7", "price_rub": 13000, "seller": "", "rating": "4.9", "reviews": "803"}])
     [res] = run_dialog(adv)
     assert "Рейтинг карточки 4,9 ★ (803 оценки)." in res.text and "Продавец:" not in res.text
+    assert "Ростест или глобальная версия — в карточке не указано" in res.text
+    assert "объём памяти" not in res.text
+    adv = advisor(tmp_path, [{"model": "POCO M7", "price_rub": 13000, "config": "?", "version": "EAC"}])
+    [res] = run_dialog(adv)
+    assert "убедитесь, что это 6/128" in res.text and "Ростест или глобальная" not in res.text
 
 
 def test_parse_budget():

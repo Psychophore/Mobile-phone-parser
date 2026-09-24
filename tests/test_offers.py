@@ -210,6 +210,14 @@ def test_model_matching_is_word_based():
     assert hot.matches_title("Смартфон Infinix HOT 50i 4/128 ГБ") and not hot.matches_title("Infinix Hot 50 Pro")
 
 
+def test_parse_config_storage_before_ram():
+    # названия с Маркета 23.09.2026: накопитель раньше памяти
+    assert parse_config("Samsung Galaxy A17 4G, черный, 128 ГБ, 4 ГБ, Да, Dual nano SIM, MediaTek Helio G99") == "4/128"
+    assert parse_config("Samsung Galaxy A17 4G, серый, 128 ГБ, 6 ГБ, Dual nano SIM") == "6/128"
+    assert parse_config('Смартфон Samsung Galaxy A17 SM-A175F 128Gb 4Gb голубой 3G 4G 6.7" 1080x2340') == "4/128"
+    assert parse_config("Смартфон Samsung Galaxy A17 4G 6GB/128GB, Dual nano SIM") == "6/128"
+
+
 def test_parse_config_space_separated():
     assert parse_config("POCO M7, 6 128ГБ, global") == "6/128"
     assert parse_config("Смартфон Poco M7 6 128 Black") == "6/128"

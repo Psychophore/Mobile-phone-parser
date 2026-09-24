@@ -56,6 +56,8 @@ class Offer:
 
 # "6/128", "6 / 128 ГБ", "6GB/128GB", "8+256", "6 128ГБ", "6 128" (WB пишет через пробел)
 _RE_CFG = re.compile(r"(?<!\d)(3|4|6|8|12|16)\s*(?:гб|gb)?\s*(?:[/+]\s*|\s+)(64|128|256|512|1024)\s*(?:гб|gb|тб|tb)?(?![\d,.])", re.I)
+# Маркет пишет накопитель раньше памяти: "128 ГБ, 4 ГБ", "128Gb 4Gb" — обе величины с единицами
+_RE_CFG_REV = re.compile(r"(?<!\d)(64|128|256|512|1024)\s*(?:гб|gb|тб|tb)\s*[,/]?\s*(3|4|6|8|12|16)\s*(?:гб|gb)(?![\wа-яё])", re.I)
 # "6 ГБ ... 128 ГБ" в свободной форме
 _RE_CFG_LOOSE = re.compile(r"(?<!\d)(3|4|6|8|12|16)\s*(?:гб|gb)\b.*?(?<!\d)(64|128|256|512|1024)\s*(?:гб|gb)\b", re.I | re.S)
 _RE_5G = re.compile(r"(?<![\w-])5g(?![\w])", re.I)
@@ -65,7 +67,13 @@ _RE_PRICE = re.compile(r"(\d[\d\s  ]{2,})\s*(?:₽|руб|р\.)", re.I)
 
 
 def parse_config(title: str) -> str:
-    m = _RE_CFG.search(title) or _RE_CFG_LOOSE.search(title)
+    m = _RE_CFG.search(title)
+    if m:
+        return f"{m.group(1)}/{m.group(2)}"
+    m = _RE_CFG_REV.search(title)
+    if m:
+        return f"{m.group(2)}/{m.group(1)}"
+    m = _RE_CFG_LOOSE.search(title)
     return f"{m.group(1)}/{m.group(2)}" if m else "?"
 
 

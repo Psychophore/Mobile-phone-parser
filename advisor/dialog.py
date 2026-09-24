@@ -200,8 +200,13 @@ class Advisor:
                  + (" <i>(чуть дороже бюджета)</i>" if p.over_budget else "")]
         if p.why:
             lines.append("Почему: " + "; ".join(escape(w) for w in p.why) + ".")
-        if p.caveats:
-            lines.append("Учтите: " + "; ".join(escape(c) for c in p.caveats) + ".")
+        caveats = list(p.caveats)
+        if o.config in ("", "?"):
+            caveats.append(f"объём памяти в названии карточки не указан — убедитесь, что это {p.phone.config}")
+        if o.version not in ("EAC", "Global"):
+            caveats.append("Ростест или глобальная версия — в карточке не указано")
+        if caveats:
+            lines.append("Учтите: " + "; ".join(escape(c) for c in caveats) + ".")
         if o.seller:
             lines.append(f"Продавец: {escape(o.seller)}{rating}" + (f", {version}" if version else "") + ".")
         elif rating or version:
